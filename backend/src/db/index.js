@@ -54,6 +54,19 @@ db.exec(`
   );
 `);
 
+// No migration framework here (CREATE TABLE IF NOT EXISTS only handles brand
+// new DBs); add columns to already-deployed databases if missing.
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+ensureColumn('ports', 'traffic_limit_bytes', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('ports', 'limit_exceeded', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('ports', 'expires_at', 'TEXT'); // ISO 8601 UTC string, NULL = no expiry
+ensureColumn('ports', 'expired', 'INTEGER NOT NULL DEFAULT 0');
+
 const managerConfigRow = db.prepare('SELECT id FROM manager_config WHERE id = 1').get();
 if (!managerConfigRow) {
   db.prepare(

@@ -16,6 +16,23 @@
           <el-option v-for="m in methods" :key="m" :label="m" :value="m" />
         </el-select>
       </el-form-item>
+      <el-form-item label="流量限制">
+        <el-input-number v-model="form.trafficLimitGb" :min="0" :precision="2" :step="10" style="width: 100%" />
+        <div class="form-hint">
+          单位 GB，0 表示不限；超过限额会自动禁用该端口
+          <template v-if="isEdit">（已用 {{ formatBytes(props.port?.total_bytes) }}）</template>
+        </div>
+      </el-form-item>
+      <el-form-item label="过期时间">
+        <el-date-picker
+          v-model="form.expiresAt"
+          type="datetime"
+          placeholder="留空表示永不过期"
+          style="width: 100%"
+          :disabled-date="isPastDate"
+        />
+        <div class="form-hint">到期后会自动禁用该端口</div>
+      </el-form-item>
       <el-form-item label="备注">
         <el-input v-model="form.remark" placeholder="例如：给张三用" />
       </el-form-item>
@@ -33,6 +50,9 @@
 <script setup>
 import { reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import { formatBytes } from '../utils/format.js';
+
+const GB = 1024 ** 3;
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -54,6 +74,10 @@ const saving = ref(false);
 
 function randomPort() {
   return 20000 + Math.floor(Math.random() * 30000);
+}
+
+function isPastDate(date) {
+  return date.getTime() < Date.now() - 86400000;
 }
 
 // shadowsocks-2022 methods (SIP022) don't derive a key from an arbitrary
@@ -79,6 +103,8 @@ const form = reactive({
   method: 'aes-256-gcm',
   remark: '',
   enabled: true,
+  trafficLimitGb: 0,
+  expiresAt: null,
 });
 
 watch(
@@ -93,6 +119,8 @@ watch(
         method: props.port.method,
         remark: props.port.remark ?? '',
         enabled: !!props.port.enabled,
+        trafficLimitGb: (props.port.traffic_limit_bytes ?? 0) / GB,
+        expiresAt: props.port.expires_at ? new Date(props.port.expires_at) : null,
       });
     } else {
       Object.assign(form, {
@@ -101,6 +129,8 @@ watch(
         method: 'aes-256-gcm',
         remark: '',
         enabled: true,
+        trafficLimitGb: 0,
+        expiresAt: null,
       });
     }
   }
@@ -109,7 +139,12 @@ watch(
 async function onSave() {
   saving.value = true;
   try {
-    await props.saveFn({ ...form });
+    const { trafficLimitGb, expiresAt, ...rest } = form;
+    await props.saveFn({
+      ...rest,
+      traffic_limit_bytes: Math.round(trafficLimitGb * GB),
+      expires_at: expiresAt instanceof Date ? expiresAt.toISOString() : null,
+    });
     emit('saved');
     emit('update:modelValue', false);
   } catch (err) {
@@ -119,3 +154,12 @@ async function onSave() {
   }
 }
 </script>
+
+<style scoped>
+.form-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+</style>

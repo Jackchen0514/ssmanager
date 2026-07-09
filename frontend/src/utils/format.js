@@ -5,3 +5,8 @@ export function formatBytes(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
+
+export function formatDateTime(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleString();
+}

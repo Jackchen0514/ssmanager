@@ -32,6 +32,10 @@ export const usePortsStore = defineStore('ports', {
       await http.delete(`/ports/${id}`);
       await this.fetchPorts();
     },
+    async resetTraffic(id) {
+      await http.post(`/ports/${id}/reset-traffic`);
+      await this.fetchPorts();
+    },
     async fetchTraffic(id, days = 7) {
       const { data } = await http.get(`/ports/${id}/traffic`, { params: { days } });
       return data;

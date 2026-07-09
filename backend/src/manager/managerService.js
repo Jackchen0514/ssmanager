@@ -36,9 +36,18 @@ export async function pingManager() {
   return true;
 }
 
+/** Current cumulative byte count the manager reports for one port, or null if absent. */
+export async function getCurrentCumulative(serverPort) {
+  const client = makeClient();
+  const stats = await client.ping();
+  return stats.has(serverPort) ? stats.get(serverPort) : null;
+}
+
 /**
  * Pull cumulative traffic per port from the manager and fold it into
  * total_bytes (monotonic across ssserver restarts) + today's traffic_daily row.
+ * Ports that cross their traffic_limit_bytes get pulled from the manager and
+ * marked limit_exceeded so the panel can no longer be used until reset/raised.
  */
 export async function pollStats() {
   const client = makeClient();
@@ -52,8 +61,12 @@ export async function pollStats() {
     INSERT INTO traffic_daily (port_id, day, bytes) VALUES (?, ?, ?)
     ON CONFLICT(port_id, day) DO UPDATE SET bytes = bytes + excluded.bytes
   `);
+  const markLimitExceeded = db.prepare(
+    `UPDATE ports SET enabled = 0, limit_exceeded = 1, updated_at = datetime('now') WHERE id = ?`
+  );
 
   const today = new Date().toISOString().slice(0, 10);
+  const overLimit = [];
   const applyStat = db.transaction((serverPort, cumulative) => {
     const port = getPort.get(serverPort);
     if (!port) return;
@@ -65,13 +78,53 @@ export async function pollStats() {
     const newTotal = port.total_bytes + delta;
     updatePort.run(cumulative, newTotal, port.id);
     if (delta > 0) upsertDaily.run(port.id, today, delta);
+
+    if (port.enabled && port.traffic_limit_bytes > 0 && newTotal >= port.traffic_limit_bytes) {
+      overLimit.push(port);
+    }
   });
 
   for (const [serverPort, cumulative] of stats) {
     applyStat(serverPort, cumulative);
   }
 
+  for (const port of overLimit) {
+    try {
+      await removePortFromManager(port.server_port);
+    } catch (err) {
+      console.error(`[managerService] failed to remove over-limit port ${port.server_port}:`, err.message);
+    }
+    markLimitExceeded.run(port.id);
+  }
+
   return stats;
+}
+
+/**
+ * Pull any enabled port whose expires_at has passed and mark it expired.
+ * Compared in JS (not SQL string comparison) since expires_at is stored as a
+ * full ISO 8601 string and SQLite has no real datetime type to compare against.
+ */
+export async function checkExpiredPorts() {
+  const candidates = db.prepare(
+    `SELECT * FROM ports WHERE enabled = 1 AND expires_at IS NOT NULL AND expires_at != ''`
+  ).all();
+  const now = Date.now();
+  const expired = candidates.filter((p) => new Date(p.expires_at).getTime() <= now);
+
+  const markExpired = db.prepare(
+    `UPDATE ports SET enabled = 0, expired = 1, updated_at = datetime('now') WHERE id = ?`
+  );
+  for (const port of expired) {
+    try {
+      await removePortFromManager(port.server_port);
+    } catch (err) {
+      console.error(`[managerService] failed to remove expired port ${port.server_port}:`, err.message);
+    }
+    markExpired.run(port.id);
+  }
+
+  return expired.map((p) => p.server_port);
 }
 
 /**

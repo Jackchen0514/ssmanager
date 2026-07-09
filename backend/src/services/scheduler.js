@@ -1,5 +1,5 @@
 import { db } from '../db/index.js';
-import { pollStats, reconcile } from '../manager/managerService.js';
+import { pollStats, checkExpiredPorts, reconcile } from '../manager/managerService.js';
 
 let pollTimer = null;
 let reconcileTimer = null;
@@ -20,11 +20,21 @@ function scheduleNext(fn, delayMs, timerRef) {
   }, delayMs);
 }
 
+// Traffic stats and time-limit expiry are both cheap, DB-driven checks that
+// fit naturally on the same cadence; run them together so a failure in one
+// (e.g. manager unreachable) doesn't skip the other for this tick.
+async function pollAndCheckExpiry() {
+  const results = await Promise.allSettled([pollStats(), checkExpiredPorts()]);
+  for (const result of results) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+}
+
 export function startScheduler() {
   const cfg = getConfig();
 
   const pollRef = { current: null, key: 'poll_interval_ms' };
-  pollRef.current = scheduleNext(pollStats, cfg.poll_interval_ms, pollRef);
+  pollRef.current = scheduleNext(pollAndCheckExpiry, cfg.poll_interval_ms, pollRef);
   pollTimer = pollRef;
 
   const reconcileRef = { current: null, key: 'reconcile_interval_ms' };
