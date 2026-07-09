@@ -212,14 +212,27 @@ log "step 4/6: frontend"
 cd "$FRONTEND_DIR"
 FRONTEND_READY=0
 
-if [[ "$BUILD_FRONTEND" -eq 0 ]]; then
+# Let an operator pre-place a build (e.g. built on a bigger machine and scp'd
+# over) and skip both the network fetch and the local build entirely.
+if [[ "$BUILD_FRONTEND" -eq 0 && -f dist/index.html ]]; then
+  log "frontend/dist already present, using it as-is (pass --build-frontend to force a rebuild)"
+  FRONTEND_READY=1
+fi
+
+if [[ "$BUILD_FRONTEND" -eq 0 && "$FRONTEND_READY" -eq 0 ]]; then
   REPO_SLUG="$(detect_repo_slug)"
   if [[ -n "$REPO_SLUG" ]]; then
     BASE_URL="https://github.com/${REPO_SLUG}/releases/download/frontend-dist-latest"
     PREBUILT_DIR="$(mktemp -d)"
     log "checking for a prebuilt frontend at ${BASE_URL}/frontend-dist.tar.gz"
-    if curl -fsSL -o "$PREBUILT_DIR/frontend-dist.tar.gz" "$BASE_URL/frontend-dist.tar.gz" 2>/dev/null \
-       && curl -fsSL -o "$PREBUILT_DIR/frontend-dist.tar.gz.sha256" "$BASE_URL/frontend-dist.tar.gz.sha256" 2>/dev/null; then
+    # --connect-timeout/--max-time so a slow/blocked CDN path (common when
+    # github.com/api.github.com are reachable but the release-asset CDN,
+    # objects.githubusercontent.com, is throttled) fails fast instead of
+    # hanging for an unbounded time before falling back to a local build.
+    # stderr is kept (not redirected to /dev/null) so the actual reason
+    # (timeout, DNS, TLS, 404) is visible in the install log.
+    if curl -fSL --connect-timeout 10 --max-time 60 -o "$PREBUILT_DIR/frontend-dist.tar.gz" "$BASE_URL/frontend-dist.tar.gz" \
+       && curl -fSL --connect-timeout 10 --max-time 30 -o "$PREBUILT_DIR/frontend-dist.tar.gz.sha256" "$BASE_URL/frontend-dist.tar.gz.sha256"; then
       if (cd "$PREBUILT_DIR" && sha256sum -c frontend-dist.tar.gz.sha256 >/dev/null 2>&1); then
         rm -rf dist
         mkdir -p dist
@@ -230,7 +243,9 @@ if [[ "$BUILD_FRONTEND" -eq 0 ]]; then
         warn "prebuilt frontend checksum mismatch, falling back to local build"
       fi
     else
-      log "no prebuilt frontend release found (CI may not have run yet), falling back to local build"
+      warn "couldn't download prebuilt frontend (see curl error above), falling back to local build." \
+           "If your network can't reach GitHub's release CDN reliably, build frontend/dist on another" \
+           "machine and copy it to $FRONTEND_DIR/dist before re-running to skip this entirely."
     fi
     rm -rf "$PREBUILT_DIR"
   fi
