@@ -8,9 +8,10 @@
 ## 目录结构
 
 ```
-install.sh   一键安装脚本
-backend/     Node.js API 服务（生产模式下也直接托管前端静态文件）
-frontend/    Vue 3 管理界面
+install.sh    一键安装脚本
+uninstall.sh  一键卸载脚本
+backend/      Node.js API 服务（生产模式下也直接托管前端静态文件）
+frontend/     Vue 3 管理界面
 ```
 
 ## 一键安装（推荐，生产部署用）
@@ -48,9 +49,11 @@ sudo ./install.sh --build-frontend   # 强制本机构建前端，不去 GitHub 
 
 `frontend/` 依赖较多（Element Plus + ECharts），`npm run build` 需要的内存在 1GB 以下的小内存 VPS 上容易触发 OOM（内核直接杀掉进程，或 Node 报 `JavaScript heap out of memory`）。为此仓库带了 `.github/workflows/build-frontend.yml`：每次 push 到 `main` 分支且改动了 `frontend/**`，GitHub Actions 会在其构建机上跑 `npm run build`，把产物打包成 `frontend-dist.tar.gz` 连同 `.sha256` 校验文件发布到一个滚动更新的 Release（tag: `frontend-dist-latest`）。
 
-`install.sh` 默认会先尝试从这个 Release 下载并校验 checksum，成功就直接用，完全跳过本机的 `npm install`/`vite build`，即使服务器只有几百 MB 内存也不受影响。只有在下载失败（比如 fork 出来的仓库还没跑过这个 workflow、没有 GitHub Releases 权限、或断网访问不了 github.com）时才会退回本机构建（这时上面的 swap + `NODE_OPTIONS=--max-old-space-size` 兜底逻辑会尽量保证本机构建也能跑成功）。
+`install.sh` 默认会先尝试从这个 Release 下载并校验 checksum（限时 10 秒连接 + 最多 60 秒传输，超时会打印具体错误后退回本机构建，不会无限卡住），成功就直接用，完全跳过本机的 `npm install`/`vite build`，即使服务器只有几百 MB 内存也不受影响。只有在下载失败（比如 fork 出来的仓库还没跑过这个 workflow、没有 GitHub Releases 权限、或服务器网络到 `github.com` 通但到 `objects.githubusercontent.com` 这个 Release 资源 CDN 不通/很慢）时才会退回本机构建（这时上面的 swap + `NODE_OPTIONS=--max-old-space-size` 兜底逻辑会尽量保证本机构建也能跑成功，但小内存服务器上仍可能非常慢）。
 
 如果你 fork 了这个仓库，第一次用之前记得让 Actions 跑一次（push 到 main，或去 Actions 页面手动触发 `workflow_dispatch`），不然 install.sh 找不到预编译产物，会自动退回本机构建。
+
+如果服务器网络确实连不上 GitHub 的 Release CDN，也可以在别的机器（自己电脑、这台服务器以外任意能跑 `npm run build` 的机器）上构建好 `frontend/dist`，用 `scp` 拷贝到服务器的 `frontend/dist/` 目录下，再执行 `install.sh`：只要 `frontend/dist/index.html` 已经存在，脚本会直接用它，跳过下载和本机构建（传 `--build-frontend` 可以强制忽略已有的 `dist` 重新本机构建）。
 
 安装完成后常用命令：
 
@@ -59,6 +62,25 @@ systemctl status ssmanager-panel
 journalctl -u ssmanager-panel -f
 systemctl restart ssmanager-panel
 ```
+
+### 卸载
+
+```bash
+sudo ./uninstall.sh
+```
+
+默认只停止并移除 `ssmanager-panel` 这个 systemd 服务（会连带杀掉它拉起的 `ssmanager` 子进程），`backend/.env`、数据库（管理员账号和所有端口配置）、已安装的 shadowsocks-rust 二进制、install.sh 可能加的 swapfile 都会保留，方便重新 `sudo ./install.sh` 时原样恢复。
+
+需要彻底清理时加参数：
+
+```bash
+sudo ./uninstall.sh --purge-data       # 连数据库和 .env 一起删（不可恢复）
+sudo ./uninstall.sh --remove-ssrust    # 连 shadowsocks-rust 二进制一起删
+sudo ./uninstall.sh --remove-swap      # 连 install.sh 加的 swapfile 一起删
+sudo ./uninstall.sh --all              # 以上三个都删
+```
+
+仓库代码本身（这个 git 目录）不会被删除，需要的话自己 `rm -rf` 对应目录。
 
 如果你更想手动控制每一步（比如本地开发调试），看下面「后端」「前端」两节的手动安装方式。
 
