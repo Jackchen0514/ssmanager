@@ -103,8 +103,13 @@ else
   esac
 
   log "fetching latest shadowsocks-rust release info for $TARGET"
-  RELEASE_JSON="$(curl -fsSL https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest)"
-  TAG="$(echo "$RELEASE_JSON" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')"
+  # Fetched to a file rather than a shell variable: the release JSON is
+  # several hundred KB (dozens of asset entries), and under `bash -x` a
+  # variable that large gets dumped in full into the trace output.
+  RELEASE_JSON_FILE="$(mktemp)"
+  curl -fsSL https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest -o "$RELEASE_JSON_FILE"
+  TAG="$(grep -m1 '"tag_name"' "$RELEASE_JSON_FILE" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+  rm -f "$RELEASE_JSON_FILE"
   [[ -n "$TAG" ]] || die "could not determine latest shadowsocks-rust release (GitHub API unreachable?)"
   ASSET="shadowsocks-${TAG}.${TARGET}.tar.xz"
   URL="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${TAG}/${ASSET}"
