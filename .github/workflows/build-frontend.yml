@@ -1,0 +1,49 @@
+name: Build frontend
+
+# Builds frontend/dist on GitHub's runners (plenty of RAM) and publishes it as
+# an asset on a rolling "frontend-dist-latest" release. install.sh downloads
+# this instead of running `npm run build` on the target server, which avoids
+# OOM failures on low-memory VPS boxes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/build-frontend.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps and build
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Package dist
+        run: |
+          tar czf frontend-dist.tar.gz -C frontend dist
+          sha256sum frontend-dist.tar.gz > frontend-dist.tar.gz.sha256
+
+      - name: Publish to rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view frontend-dist-latest >/dev/null 2>&1 || \
+            gh release create frontend-dist-latest \
+              --title "Prebuilt frontend (latest)" \
+              --notes "Auto-built by CI from main. Used by install.sh to skip building the frontend on the target server."
+          gh release upload frontend-dist-latest \
+            frontend-dist.tar.gz frontend-dist.tar.gz.sha256 --clobber

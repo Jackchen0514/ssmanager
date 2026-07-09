@@ -27,7 +27,7 @@ sudo ./install.sh
 1. 安装 Node.js 20（如未安装或版本 <18）、编译工具链（gcc/make 等，供 better-sqlite3 编译原生模块用）。
 2. 从 GitHub Releases 下载并校验 checksum 安装 shadowsocks-rust（`ssserver`/`ssmanager`/`sslocal`/`ssservice`）到 `/usr/local/bin`。
 3. 安装后端依赖，首次运行时生成带随机 `JWT_SECRET` 和随机管理员密码的 `backend/.env`，创建管理员账号。
-4. 构建前端生产包（`frontend/dist`），由后端 Express 直接托管（`/` 走静态文件，`/api` 走接口），单进程单端口，无需额外装 nginx。
+4. 准备前端生产包（`frontend/dist`），由后端 Express 直接托管（`/` 走静态文件，`/api` 走接口），单进程单端口，无需额外装 nginx。**优先从 GitHub Releases 下载 CI 预编译好的产物**（见下方「前端预编译」一节），下载失败时才会退回到本机跑 `npm run build`。
 5. 注册为 systemd 服务 `ssmanager-panel`（开机自启、崩溃自动重启）。
 
 跑完会打印面板访问地址和随机生成的管理员密码。**shadowsocks-rust 二进制只是装好，并不会自动启动**——登录面板后去「设置」页面点「启动」，由面板自己的进程管理来拉起 `ssmanager`（避免和 systemd 重复管理同一个进程）。
@@ -38,9 +38,19 @@ sudo ./install.sh
 sudo ./install.sh --skip-ssrust      # 已经自己装好 shadowsocks-rust，跳过下载安装
 sudo ./install.sh --force-ssrust     # 强制重新下载安装 shadowsocks-rust
 sudo ./install.sh --port 8080        # 面板监听端口（默认 3000，仅首次生成 .env 时生效）
+sudo ./install.sh --no-swap          # 不自动创建 swap 文件（默认低内存无 swap 时会加 2G swap）
+sudo ./install.sh --build-frontend   # 强制本机构建前端，不去 GitHub Releases 找预编译产物
 ```
 
-脚本可以安全重复执行：已存在的 `backend/.env`、已装好的 shadowsocks-rust、已创建的管理员账号都不会被覆盖/重建，只会重新走 `npm install`/构建前端/重启 systemd 服务。
+脚本可以安全重复执行：已存在的 `backend/.env`、已装好的 shadowsocks-rust、已创建的管理员账号都不会被覆盖/重建，只会重新走 `npm install`/准备前端/重启 systemd 服务。
+
+### 前端预编译（低配置服务器推荐）
+
+`frontend/` 依赖较多（Element Plus + ECharts），`npm run build` 需要的内存在 1GB 以下的小内存 VPS 上容易触发 OOM（内核直接杀掉进程，或 Node 报 `JavaScript heap out of memory`）。为此仓库带了 `.github/workflows/build-frontend.yml`：每次 push 到 `main` 分支且改动了 `frontend/**`，GitHub Actions 会在其构建机上跑 `npm run build`，把产物打包成 `frontend-dist.tar.gz` 连同 `.sha256` 校验文件发布到一个滚动更新的 Release（tag: `frontend-dist-latest`）。
+
+`install.sh` 默认会先尝试从这个 Release 下载并校验 checksum，成功就直接用，完全跳过本机的 `npm install`/`vite build`，即使服务器只有几百 MB 内存也不受影响。只有在下载失败（比如 fork 出来的仓库还没跑过这个 workflow、没有 GitHub Releases 权限、或断网访问不了 github.com）时才会退回本机构建（这时上面的 swap + `NODE_OPTIONS=--max-old-space-size` 兜底逻辑会尽量保证本机构建也能跑成功）。
+
+如果你 fork 了这个仓库，第一次用之前记得让 Actions 跑一次（push 到 main，或去 Actions 页面手动触发 `workflow_dispatch`），不然 install.sh 找不到预编译产物，会自动退回本机构建。
 
 安装完成后常用命令：
 

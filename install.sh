@@ -12,10 +12,16 @@
 #      reboots and restarts on crash.
 #
 # Usage:
-#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap]
+#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap] [--build-frontend]
 #
 # Safe to re-run: it will not overwrite an existing backend/.env or re-seed the
 # admin account, and skips the shadowsocks-rust download if already installed.
+#
+# Frontend: by default the installer tries to download a prebuilt frontend/dist
+# from the repo's GitHub Releases (built by .github/workflows/build-frontend.yml
+# on GitHub's own runners) instead of running `npm run build` locally, since
+# that build can OOM on small/low-RAM VPS boxes. Pass --build-frontend to force
+# a local build (e.g. you changed frontend/ code and want to test it).
 
 set -euo pipefail
 
@@ -26,10 +32,21 @@ PANEL_PORT="${PANEL_PORT:-3000}"
 SKIP_SSRUST=0
 FORCE_SSRUST=0
 NO_SWAP=0
+BUILD_FRONTEND=0
 
 log()  { echo -e "\033[1;32m[install]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[install]\033[0m $*"; }
 die()  { echo -e "\033[1;31m[install]\033[0m $*" >&2; exit 1; }
+
+# Parses "git@github.com:owner/repo.git" or "https://github.com/owner/repo.git"
+# (or without ".git") into "owner/repo". Empty output if origin isn't GitHub.
+detect_repo_slug() {
+  local url
+  url="$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || true)"
+  if [[ "$url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}"
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,8 +54,9 @@ while [[ $# -gt 0 ]]; do
     --force-ssrust) FORCE_SSRUST=1; shift ;;
     --port) PANEL_PORT="$2"; shift 2 ;;
     --no-swap) NO_SWAP=1; shift ;;
+    --build-frontend) BUILD_FRONTEND=1; shift ;;
     -h|--help)
-      sed -n '2,20p' "${BASH_SOURCE[0]}"
+      sed -n '2,24p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -188,12 +206,51 @@ fi
 npm run seed
 
 # ---------------------------------------------------------------------------
-log "step 4/6: frontend build"
+log "step 4/6: frontend"
 # ---------------------------------------------------------------------------
 
 cd "$FRONTEND_DIR"
-npm install
-npm run build
+FRONTEND_READY=0
+
+if [[ "$BUILD_FRONTEND" -eq 0 ]]; then
+  REPO_SLUG="$(detect_repo_slug)"
+  if [[ -n "$REPO_SLUG" ]]; then
+    BASE_URL="https://github.com/${REPO_SLUG}/releases/download/frontend-dist-latest"
+    PREBUILT_DIR="$(mktemp -d)"
+    log "checking for a prebuilt frontend at ${BASE_URL}/frontend-dist.tar.gz"
+    if curl -fsSL -o "$PREBUILT_DIR/frontend-dist.tar.gz" "$BASE_URL/frontend-dist.tar.gz" 2>/dev/null \
+       && curl -fsSL -o "$PREBUILT_DIR/frontend-dist.tar.gz.sha256" "$BASE_URL/frontend-dist.tar.gz.sha256" 2>/dev/null; then
+      if (cd "$PREBUILT_DIR" && sha256sum -c frontend-dist.tar.gz.sha256 >/dev/null 2>&1); then
+        rm -rf dist
+        mkdir -p dist
+        tar -xzf "$PREBUILT_DIR/frontend-dist.tar.gz" -C dist --strip-components=1
+        log "using prebuilt frontend from GitHub Releases (skipped local npm/vite build)"
+        FRONTEND_READY=1
+      else
+        warn "prebuilt frontend checksum mismatch, falling back to local build"
+      fi
+    else
+      log "no prebuilt frontend release found (CI may not have run yet), falling back to local build"
+    fi
+    rm -rf "$PREBUILT_DIR"
+  fi
+fi
+
+if [[ "$FRONTEND_READY" -eq 0 ]]; then
+  npm install
+
+  # Node's default V8 heap-size heuristic is derived from total system RAM and
+  # can self-limit to a heap far smaller than what's actually available (e.g.
+  # ~250MB on a 512MB-RAM box), causing `vite build` to hit "JavaScript heap
+  # out of memory" even with plenty of swap present. Give it an explicit,
+  # generous heap based on RAM+swap actually available so it uses the swap
+  # safety net above instead of self-limiting.
+  BUILD_MEM_MB="$(free -m | awk '/^Mem:/{mem=$2} /^Swap:/{swap=$2} END{print mem+swap}')"
+  NODE_HEAP_MB=$(( BUILD_MEM_MB * 70 / 100 ))
+  [[ "$NODE_HEAP_MB" -lt 512 ]] && NODE_HEAP_MB=512
+  log "building frontend with NODE_OPTIONS=--max-old-space-size=${NODE_HEAP_MB} (detected ${BUILD_MEM_MB}MB RAM+swap)"
+  NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}" npm run build
+fi
 
 # ---------------------------------------------------------------------------
 log "step 5/6: systemd service"
