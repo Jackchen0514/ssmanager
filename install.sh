@@ -12,7 +12,7 @@
 #      reboots and restarts on crash.
 #
 # Usage:
-#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000]
+#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap]
 #
 # Safe to re-run: it will not overwrite an existing backend/.env or re-seed the
 # admin account, and skips the shadowsocks-rust download if already installed.
@@ -25,6 +25,7 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 PANEL_PORT="${PANEL_PORT:-3000}"
 SKIP_SSRUST=0
 FORCE_SSRUST=0
+NO_SWAP=0
 
 log()  { echo -e "\033[1;32m[install]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[install]\033[0m $*"; }
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --skip-ssrust) SKIP_SSRUST=1; shift ;;
     --force-ssrust) FORCE_SSRUST=1; shift ;;
     --port) PANEL_PORT="$2"; shift 2 ;;
+    --no-swap) NO_SWAP=1; shift ;;
     -h|--help)
       sed -n '2,20p' "${BASH_SOURCE[0]}"
       exit 0
@@ -62,6 +64,29 @@ elif command -v yum >/dev/null; then
   yum install -y curl tar xz gcc gcc-c++ make python3 openssl
 else
   die "unsupported OS: no apt-get/dnf/yum found. Install Node.js >=18, curl, tar, xz, gcc/make yourself and re-run."
+fi
+
+# npm install (better-sqlite3 compile) and `vite build` (bundling ~2000+
+# modules, echarts + element-plus pull in a lot) can both use enough memory to
+# get OOM-killed on small VPS boxes with little or no swap. Add a swapfile as
+# a safety net if there's none and RAM is tight.
+if [[ "$NO_SWAP" -eq 0 ]]; then
+  TOTAL_MEM_MB="$(free -m | awk '/^Mem:/{print $2}')"
+  TOTAL_SWAP_MB="$(free -m | awk '/^Swap:/{print $2}')"
+  if [[ "$TOTAL_SWAP_MB" -eq 0 && "$TOTAL_MEM_MB" -lt 2048 ]]; then
+    AVAIL_DISK_MB="$(df -m "$SCRIPT_DIR" | awk 'NR==2{print $4}')"
+    SWAP_SIZE_MB=2048
+    if [[ "$AVAIL_DISK_MB" -gt $((SWAP_SIZE_MB + 1024)) ]]; then
+      log "low memory (${TOTAL_MEM_MB}MB) and no swap found, adding a ${SWAP_SIZE_MB}MB swapfile at /swapfile so npm/vite builds don't get OOM-killed"
+      fallocate -l "${SWAP_SIZE_MB}M" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count="$SWAP_SIZE_MB" status=none
+      chmod 600 /swapfile
+      mkswap /swapfile >/dev/null
+      swapon /swapfile
+      grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    else
+      warn "low memory (${TOTAL_MEM_MB}MB) and no swap, but not enough free disk space to add one safely — the build below may get OOM-killed. Free up disk space or add swap manually, then re-run."
+    fi
+  fi
 fi
 
 NODE_OK=0
