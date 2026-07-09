@@ -51,13 +51,6 @@ const methods = [
 
 const isEdit = ref(false);
 const saving = ref(false);
-const form = reactive({
-  server_port: randomPort(),
-  password: randomPassword('aes-256-gcm'),
-  method: 'aes-256-gcm',
-  remark: '',
-  enabled: true,
-});
 
 function randomPort() {
   return 20000 + Math.floor(Math.random() * 30000);
@@ -79,6 +72,14 @@ function randomPassword(method) {
   }
   return [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(36)).join('').slice(0, 16);
 }
+
+const form = reactive({
+  server_port: randomPort(),
+  password: randomPassword('aes-256-gcm'),
+  method: 'aes-256-gcm',
+  remark: '',
+  enabled: true,
+});
 
 watch(
   () => props.modelValue,
