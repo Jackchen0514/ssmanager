@@ -12,7 +12,12 @@
 #      reboots and restarts on crash.
 #
 # Usage:
-#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap] [--build-frontend]
+#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap] [--build-frontend] [--no-autostart]
+#
+# After the panel comes up, install.sh logs in with the admin account and
+# calls the panel's own "start ssmanager process" API so shadowsocks-rust is
+# actually running when the script finishes, not just installed. Pass
+# --no-autostart to skip this and start it yourself from the Settings page.
 #
 # Safe to re-run: it will not overwrite an existing backend/.env or re-seed the
 # admin account, and skips the shadowsocks-rust download if already installed.
@@ -33,6 +38,7 @@ SKIP_SSRUST=0
 FORCE_SSRUST=0
 NO_SWAP=0
 BUILD_FRONTEND=0
+NO_AUTOSTART=0
 
 log()  { echo -e "\033[1;32m[install]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[install]\033[0m $*"; }
@@ -55,8 +61,9 @@ while [[ $# -gt 0 ]]; do
     --port) PANEL_PORT="$2"; shift 2 ;;
     --no-swap) NO_SWAP=1; shift ;;
     --build-frontend) BUILD_FRONTEND=1; shift ;;
+    --no-autostart) NO_AUTOSTART=1; shift ;;
     -h|--help)
-      sed -n '2,24p' "${BASH_SOURCE[0]}"
+      sed -n '2,29p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -304,6 +311,53 @@ else
   warn "ssmanager-panel did not start cleanly, check: journalctl -u ssmanager-panel -e"
 fi
 
+# Auto-start the ssmanager process the panel supervises, via the panel's own
+# API (not systemd -- the panel manages it as a child process, so starting it
+# separately via systemd would just conflict). The panel process always
+# restarts fresh above, so its in-memory "is ssmanager running" state is
+# always reset; this makes install.sh actually leave shadowsocks-rust running
+# instead of just installed.
+SSMANAGER_AUTOSTARTED=0
+if [[ "$NO_AUTOSTART" -eq 0 ]] && systemctl is-active --quiet ssmanager-panel; then
+  PANEL_UP=0
+  for i in $(seq 1 15); do
+    CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PANEL_PORT}/api/auth/me" 2>/dev/null || true)"
+    if [[ -n "$CODE" && "$CODE" != "000" ]]; then
+      PANEL_UP=1
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "$PANEL_UP" -eq 1 ]]; then
+    ADMIN_USER_ENV="$(grep -m1 '^ADMIN_USERNAME=' "$BACKEND_DIR/.env" | cut -d= -f2-)"
+    ADMIN_PASS_ENV="$(grep -m1 '^ADMIN_PASSWORD=' "$BACKEND_DIR/.env" | cut -d= -f2-)"
+    LOGIN_BODY="$(python3 -c "import json,sys; print(json.dumps({'username': sys.argv[1], 'password': sys.argv[2]}))" "$ADMIN_USER_ENV" "$ADMIN_PASS_ENV")"
+    LOGIN_RESP="$(curl -fsS -X POST "http://127.0.0.1:${PANEL_PORT}/api/auth/login" \
+      -H 'Content-Type: application/json' -d "$LOGIN_BODY" 2>/dev/null || true)"
+    TOKEN="$(printf '%s' "$LOGIN_RESP" | python3 -c 'import sys,json
+try:
+    print(json.load(sys.stdin).get("token",""))
+except Exception:
+    pass' 2>/dev/null || true)"
+
+    if [[ -n "$TOKEN" ]]; then
+      START_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PANEL_PORT}/api/process/start" \
+        -H "Authorization: Bearer ${TOKEN}" 2>/dev/null || true)"
+      if [[ "$START_CODE" == "200" ]]; then
+        log "ssmanager process started via panel"
+        SSMANAGER_AUTOSTARTED=1
+      else
+        warn "couldn't auto-start ssmanager (panel API returned HTTP $START_CODE) -- check the binary path/args in Settings and click 启动 manually"
+      fi
+    else
+      warn "couldn't log in to auto-start ssmanager (check ADMIN_USERNAME/ADMIN_PASSWORD in $BACKEND_DIR/.env) -- click 启动 manually from Settings"
+    fi
+  else
+    warn "panel API didn't respond within 15s, skipping ssmanager auto-start -- start it manually from Settings once it's up"
+  fi
+fi
+
 SERVER_IP="$(curl -fsSL --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo YOUR_SERVER_IP)"
 
 echo
@@ -319,10 +373,16 @@ fi
 echo
 if [[ "$SKIP_SSRUST" -eq 1 ]]; then
 echo " 已跳过 shadowsocks-rust 安装（--skip-ssrust）。请在「设置」页面填写你自己的"
-echo " ssmanager 可执行文件路径。"
+echo " ssmanager 可执行文件路径后点击「启动」。"
 else
-echo " shadowsocks-rust 已安装到 ${SSRUST_BIN_DIR}（尚未启动）。"
-echo " 登录面板后进入「设置」页面，确认可执行文件路径后点击「启动」即可拉起 ssmanager。"
+echo " shadowsocks-rust 已安装到 ${SSRUST_BIN_DIR}。"
+fi
+if [[ "$SSMANAGER_AUTOSTARTED" -eq 1 ]]; then
+echo " ssmanager 进程已自动启动。"
+elif [[ "$NO_AUTOSTART" -eq 1 ]]; then
+echo " 已跳过自动启动（--no-autostart）。登录面板后进入「设置」页面点击「启动」。"
+else
+echo " ssmanager 未能自动启动，见上方警告。登录面板后进入「设置」页面确认配置后点击「启动」。"
 fi
 echo
 echo " 常用命令:"

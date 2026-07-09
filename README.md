@@ -30,8 +30,9 @@ sudo ./install.sh
 3. 安装后端依赖，首次运行时生成带随机 `JWT_SECRET` 和随机管理员密码的 `backend/.env`，创建管理员账号。
 4. 准备前端生产包（`frontend/dist`），由后端 Express 直接托管（`/` 走静态文件，`/api` 走接口），单进程单端口，无需额外装 nginx。**优先从 GitHub Releases 下载 CI 预编译好的产物**（见下方「前端预编译」一节），下载失败时才会退回到本机跑 `npm run build`。
 5. 注册为 systemd 服务 `ssmanager-panel`（开机自启、崩溃自动重启）。
+6. 等面板 API 起来后，用管理员账号登录并调用面板自己的「启动进程」接口拉起 `ssmanager`（不是通过 systemd 单独起——面板本身就把 `ssmanager` 当子进程管理，systemd 只管面板这一层，避免两边重复管理同一个进程冲突）。
 
-跑完会打印面板访问地址和随机生成的管理员密码。**shadowsocks-rust 二进制只是装好，并不会自动启动**——登录面板后去「设置」页面点「启动」，由面板自己的进程管理来拉起 `ssmanager`（避免和 systemd 重复管理同一个进程）。
+跑完会打印面板访问地址和随机生成的管理员密码，此时 `ssmanager` 应该已经在跑了（终端输出会明确告诉你是否自动启动成功；如果没成功，会打印原因，去「设置」页面确认配置后手动点「启动」即可）。
 
 常用参数：
 
@@ -41,6 +42,7 @@ sudo ./install.sh --force-ssrust     # 强制重新下载安装 shadowsocks-rust
 sudo ./install.sh --port 8080        # 面板监听端口（默认 3000，仅首次生成 .env 时生效）
 sudo ./install.sh --no-swap          # 不自动创建 swap 文件（默认低内存无 swap 时会加 2G swap）
 sudo ./install.sh --build-frontend   # 强制本机构建前端，不去 GitHub Releases 找预编译产物
+sudo ./install.sh --no-autostart     # 装完不自动启动 ssmanager，自己去「设置」页面点「启动」
 ```
 
 脚本可以安全重复执行：已存在的 `backend/.env`、已装好的 shadowsocks-rust、已创建的管理员账号都不会被覆盖/重建，只会重新走 `npm install`/准备前端/重启 systemd 服务。
