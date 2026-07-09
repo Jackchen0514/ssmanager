@@ -157,6 +157,22 @@ npm run build   # 生产构建，产物在 frontend/dist，可用任意静态文
 - 流量限额：可为每个端口设置流量上限（GB，0 表示不限），超过后自动从 manager 移除并禁用，标记为「已超限」；可编辑提高限额或点「重置流量」后重新启用
 - 过期时间：可为每个端口设置到期时间（留空表示永不过期），到期后自动从 manager 移除并禁用，标记为「已过期」；编辑延长过期时间后可重新启用
 - 设置：Manager 连接参数、ssmanager 进程控制与日志查看、修改管理员密码
+- API Token：在「设置」页面生成长期有效的 token，供第三方脚本/系统调用面板现有的所有 API（无需走用户名密码登录），可随时撤销
+
+## 第三方 API 调用
+
+在「设置」页面「API Token」区块点「生成新 Token」，输入一个便于识别的名称（例如 `monitoring-script`），生成的 token 只会完整显示这一次，请立即复制保存——后续列表里只显示前缀，用来分辨是哪个 token，无法找回完整内容。
+
+拿到 token 后，像下面这样调用面板已有的任意 API（和登录后浏览器里用的是同一套接口，权限也等同于管理员）：
+
+```bash
+curl -H "Authorization: Bearer ssm_xxxxxxxxxxxxxxxxxxxx" http://<面板地址>/api/ports
+curl -X POST -H "Authorization: Bearer ssm_xxxxxxxxxxxxxxxxxxxx" -H 'Content-Type: application/json' \
+  -d '{"server_port":8388,"password":"xxx","method":"aes-256-gcm"}' \
+  http://<面板地址>/api/ports
+```
+
+token 一旦泄露，攻击者可以做管理员能做的任何事（增删端口、改密码、控制 ssmanager 进程等），请像对待密码一样保管；怀疑泄露时去「设置」页面点「撤销」立即失效。
 
 ## 已知限制
 
@@ -165,3 +181,4 @@ npm run build   # 生产构建，产物在 frontend/dist，可用任意静态文
 - ssmanager 没有原生的“更新端口配置”命令，编辑端口密码/加密方式时后端会自动做 remove + add。
 - 进程启动参数按空格切分，暂不支持带空格的带引号参数。
 - `install.sh` 依赖 systemd，非 systemd 系统（部分容器、旧版 init）需要自己写启动脚本；也只自动识别 x86_64/aarch64/armv7 三种架构。
+- API Token 目前不分权限范围（scope），拿到 token 就等于拿到管理员权限，没有"只读"或"只能管端口"这类受限 token。

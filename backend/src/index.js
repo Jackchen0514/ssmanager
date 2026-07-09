@@ -12,6 +12,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { managerRouter } from './routes/manager.js';
 import { processRouter } from './routes/process.js';
 import { settingsRouter } from './routes/settings.js';
+import { tokensRouter } from './routes/tokens.js';
 import { startScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/dashboard', requireAuth, dashboardRouter);
 app.use('/api/manager', requireAuth, managerRouter);
 app.use('/api/process', requireAuth, processRouter);
 app.use('/api/settings', requireAuth, settingsRouter);
+app.use('/api/tokens', requireAuth, tokensRouter);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }));
 

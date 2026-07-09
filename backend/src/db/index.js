@@ -52,6 +52,15 @@ db.exec(`
     bytes INTEGER NOT NULL DEFAULT 0,
     UNIQUE(port_id, day)
   );
+
+  CREATE TABLE IF NOT EXISTS api_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    token_prefix TEXT NOT NULL,
+    last_used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // No migration framework here (CREATE TABLE IF NOT EXISTS only handles brand

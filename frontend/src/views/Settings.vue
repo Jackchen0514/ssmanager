@@ -61,6 +61,8 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <ApiTokensCard />
   </div>
 </template>
 
@@ -69,6 +71,7 @@ import { onMounted, onBeforeUnmount, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import http from '../api/http.js';
 import { useDashboardStore } from '../stores/dashboard.js';
+import ApiTokensCard from '../components/ApiTokensCard.vue';
 
 const dashboard = useDashboardStore();
 const form = ref(null);
