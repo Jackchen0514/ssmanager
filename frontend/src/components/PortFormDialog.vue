@@ -7,12 +7,12 @@
       <el-form-item label="密码">
         <el-input v-model="form.password">
           <template #append>
-            <el-button @click="form.password = randomPassword()">随机</el-button>
+            <el-button @click="form.password = randomPassword(form.method)">随机</el-button>
           </template>
         </el-input>
       </el-form-item>
       <el-form-item label="加密方式">
-        <el-select v-model="form.method" style="width: 100%">
+        <el-select v-model="form.method" style="width: 100%" @change="form.password = randomPassword(form.method)">
           <el-option v-for="m in methods" :key="m" :label="m" :value="m" />
         </el-select>
       </el-form-item>
@@ -53,7 +53,7 @@ const isEdit = ref(false);
 const saving = ref(false);
 const form = reactive({
   server_port: randomPort(),
-  password: randomPassword(),
+  password: randomPassword('aes-256-gcm'),
   method: 'aes-256-gcm',
   remark: '',
   enabled: true,
@@ -62,7 +62,21 @@ const form = reactive({
 function randomPort() {
   return 20000 + Math.floor(Math.random() * 30000);
 }
-function randomPassword() {
+
+// shadowsocks-2022 methods (SIP022) don't derive a key from an arbitrary
+// passphrase like the classic AEAD ciphers do — the password field must
+// literally be a base64-encoded key of the method's exact byte length, or
+// the server rejects the port as "invalid server".
+const KEY_BYTES_2022 = {
+  '2022-blake3-aes-128-gcm': 16,
+  '2022-blake3-aes-256-gcm': 32,
+  '2022-blake3-chacha20-poly1305': 32,
+};
+function randomPassword(method) {
+  const keyBytes = KEY_BYTES_2022[method];
+  if (keyBytes) {
+    return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(keyBytes))));
+  }
   return [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(36)).join('').slice(0, 16);
 }
 
@@ -82,7 +96,7 @@ watch(
     } else {
       Object.assign(form, {
         server_port: randomPort(),
-        password: randomPassword(),
+        password: randomPassword('aes-256-gcm'),
         method: 'aes-256-gcm',
         remark: '',
         enabled: true,
