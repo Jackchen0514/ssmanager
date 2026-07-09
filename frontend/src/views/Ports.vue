@@ -30,11 +30,7 @@
           <el-button link @click="$router.push(`/ports/${row.id}`)">详情</el-button>
           <el-button link @click="openShare(row)">分享</el-button>
           <el-button link @click="openEdit(row)">编辑</el-button>
-          <el-popconfirm
-            v-if="row.limit_exceeded"
-            title="确定重置该端口的流量统计？重置后可重新启用"
-            @confirm="onResetTraffic(row)"
-          >
+          <el-popconfirm title="确定清零该端口的流量统计？" @confirm="onResetTraffic(row)">
             <template #reference>
               <el-button link>重置流量</el-button>
             </template>
