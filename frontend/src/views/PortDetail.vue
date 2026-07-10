@@ -1,10 +1,10 @@
 <template>
   <div class="port-detail">
-    <el-page-header @back="$router.push('/ports')" :content="port ? `端口 ${port.server_port}` : ''" />
+    <el-page-header @back="$router.push('/ports')" :content="port ? `节点 ${port.server_port}` : ''" />
 
     <el-card v-if="port" style="margin-top: 16px">
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="端口">{{ port.server_port }}</el-descriptions-item>
+        <el-descriptions-item label="端口号">{{ port.server_port }}</el-descriptions-item>
         <el-descriptions-item label="加密方式">{{ port.method }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ port.remark || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">

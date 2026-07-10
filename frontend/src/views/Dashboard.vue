@@ -2,10 +2,10 @@
   <div class="dashboard">
     <el-row :gutter="16">
       <el-col :span="6">
-        <el-card><StatTile label="端口总数" :value="summary?.portCount ?? '-'" /></el-card>
+        <el-card><StatTile label="节点总数" :value="summary?.portCount ?? '-'" /></el-card>
       </el-col>
       <el-col :span="6">
-        <el-card><StatTile label="已启用端口" :value="summary?.enabledCount ?? '-'" /></el-card>
+        <el-card><StatTile label="已启用节点" :value="summary?.enabledCount ?? '-'" /></el-card>
       </el-col>
       <el-col :span="6">
         <el-card><StatTile label="今日流量" :value="formatBytes(summary?.todayBytes)" /></el-card>

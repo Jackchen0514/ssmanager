@@ -7,7 +7,7 @@
           <span>概览</span>
         </el-menu-item>
         <el-menu-item index="/ports">
-          <span>端口管理</span>
+          <span>节点管理</span>
         </el-menu-item>
         <el-menu-item index="/settings">
           <span>设置</span>

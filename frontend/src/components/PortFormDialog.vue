@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="modelValue" :title="isEdit ? '编辑端口' : '新增端口'" width="480px" @update:model-value="$emit('update:modelValue', $event)">
+  <el-dialog :model-value="modelValue" :title="isEdit ? '编辑节点' : '新增节点'" width="480px" @update:model-value="$emit('update:modelValue', $event)">
     <el-form :model="form" label-width="90px">
       <el-form-item label="端口号">
         <el-input-number v-model="form.server_port" :min="1" :max="65535" :disabled="isEdit" style="width: 100%" />
@@ -19,7 +19,7 @@
       <el-form-item label="流量限制">
         <el-input-number v-model="form.trafficLimitGb" :min="0" :precision="2" :step="10" style="width: 100%" />
         <div class="form-hint">
-          单位 GB，0 表示不限；超过限额会自动禁用该端口
+          单位 GB，0 表示不限；超过限额会自动禁用该节点
           <template v-if="isEdit">（已用 {{ formatBytes(props.port?.total_bytes) }}）</template>
         </div>
       </el-form-item>
@@ -31,7 +31,7 @@
           style="width: 100%"
           :disabled-date="isPastDate"
         />
-        <div class="form-hint">到期后会自动禁用该端口</div>
+        <div class="form-hint">到期后会自动禁用该节点</div>
       </el-form-item>
       <el-form-item label="TCP 连接数">
         <el-input-number v-model="form.tcp_max_connections" :min="0" style="width: 100%" />

@@ -1,7 +1,7 @@
 <template>
   <div class="ports">
     <div class="ports__toolbar">
-      <el-button type="primary" @click="openCreate">新增端口</el-button>
+      <el-button type="primary" @click="openCreate">新增节点</el-button>
     </div>
 
     <el-table :data="store.ports" v-loading="store.loading" style="width: 100%">
@@ -40,12 +40,12 @@
           <el-button link @click="$router.push(`/ports/${row.id}`)">详情</el-button>
           <el-button link @click="openShare(row)">分享</el-button>
           <el-button link @click="openEdit(row)">编辑</el-button>
-          <el-popconfirm title="确定清零该端口的流量统计？" @confirm="onResetTraffic(row)">
+          <el-popconfirm title="确定清零该节点的流量统计？" @confirm="onResetTraffic(row)">
             <template #reference>
               <el-button link>重置流量</el-button>
             </template>
           </el-popconfirm>
-          <el-popconfirm title="确定删除该端口？" @confirm="store.deletePort(row.id)">
+          <el-popconfirm title="确定删除该节点？" @confirm="store.deletePort(row.id)">
             <template #reference>
               <el-button link type="danger">删除</el-button>
             </template>

@@ -7,7 +7,7 @@
       </div>
     </template>
     <p class="hint">
-      第三方可以用 <code>Authorization: Bearer &lt;token&gt;</code> 调用面板现有的所有 API（端口管理、状态查询等），权限等同于管理员登录，请像对待密码一样保管好；泄露后请立即撤销。
+      第三方可以用 <code>Authorization: Bearer &lt;token&gt;</code> 调用面板现有的所有 API（节点管理、状态查询等），权限等同于管理员登录，请像对待密码一样保管好；泄露后请立即撤销。
     </p>
     <el-table :data="tokens" v-loading="loading" style="width: 100%" empty-text="还没有创建过 Token">
       <el-table-column prop="name" label="名称" min-width="140" />
