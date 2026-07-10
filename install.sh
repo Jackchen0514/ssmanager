@@ -146,10 +146,14 @@ elif command -v ssmanager >/dev/null && [[ "$FORCE_SSRUST" -eq 0 ]]; then
   log "ssmanager already installed at $(command -v ssmanager), skipping (use --force-ssrust to reinstall)"
 else
   ARCH="$(uname -m)"
+  # musl (statically linked) rather than gnu: the gnu build is linked against
+  # whatever glibc the GitHub Actions runner has (currently 2.39+), which is
+  # newer than what many production VPS distros ship (e.g. Ubuntu 20.04/22.04),
+  # causing "GLIBC_2.39 not found" at runtime. musl has no such dependency.
   case "$ARCH" in
-    x86_64) TARGET="x86_64-unknown-linux-gnu" ;;
-    aarch64|arm64) TARGET="aarch64-unknown-linux-gnu" ;;
-    armv7l) TARGET="armv7-unknown-linux-gnueabihf" ;;
+    x86_64) TARGET="x86_64-unknown-linux-musl" ;;
+    aarch64|arm64) TARGET="aarch64-unknown-linux-musl" ;;
+    armv7l) TARGET="armv7-unknown-linux-musleabihf" ;;
     *) die "unsupported architecture for shadowsocks-rust auto-install: $ARCH (use --skip-ssrust and install it manually)" ;;
   esac
 
