@@ -75,6 +75,12 @@ ensureColumn('ports', 'traffic_limit_bytes', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ports', 'limit_exceeded', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ports', 'expires_at', 'TEXT'); // ISO 8601 UTC string, NULL = no expiry
 ensureColumn('ports', 'expired', 'INTEGER NOT NULL DEFAULT 0');
+// Requires shadowsocks-rust >= v1.23.8 (Jackchen0514/shadowsocks-rust fork) for
+// the manager `add:` protocol to actually honor these; older ssmanager builds
+// silently ignore the extra fields. 0 = unlimited, same convention as traffic_limit_bytes.
+ensureColumn('ports', 'tcp_max_connections', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('ports', 'udp_max_associations', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('ports', 'max_online_ips', 'INTEGER NOT NULL DEFAULT 0');
 
 const managerConfigRow = db.prepare('SELECT id FROM manager_config WHERE id = 1').get();
 if (!managerConfigRow) {

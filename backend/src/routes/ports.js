@@ -16,6 +16,9 @@ const portSchema = z.object({
   enabled: z.boolean().default(true),
   traffic_limit_bytes: z.number().int().min(0).default(0), // 0 = unlimited
   expires_at: z.string().datetime().nullable().default(null), // null = never expires
+  tcp_max_connections: z.number().int().min(0).default(0), // 0 = unlimited; requires ssmanager >= v1.23.8
+  udp_max_associations: z.number().int().min(0).default(0), // 0 = unlimited; requires ssmanager >= v1.23.8
+  max_online_ips: z.number().int().min(0).default(0), // 0 = unlimited; requires ssmanager >= v1.23.8
 });
 
 const updateSchema = portSchema.partial();
@@ -69,8 +72,8 @@ portsRouter.post('/', asyncHandler(async (req, res) => {
   }
 
   const insert = db.prepare(`
-    INSERT INTO ports (server_port, password, method, plugin, plugin_opts, remark, enabled, traffic_limit_bytes, expires_at)
-    VALUES (@server_port, @password, @method, @plugin, @plugin_opts, @remark, @enabled, @traffic_limit_bytes, @expires_at)
+    INSERT INTO ports (server_port, password, method, plugin, plugin_opts, remark, enabled, traffic_limit_bytes, expires_at, tcp_max_connections, udp_max_associations, max_online_ips)
+    VALUES (@server_port, @password, @method, @plugin, @plugin_opts, @remark, @enabled, @traffic_limit_bytes, @expires_at, @tcp_max_connections, @udp_max_associations, @max_online_ips)
   `);
   const info = insert.run({
     server_port: body.server_port,
@@ -82,6 +85,9 @@ portsRouter.post('/', asyncHandler(async (req, res) => {
     enabled: body.enabled ? 1 : 0,
     traffic_limit_bytes: body.traffic_limit_bytes,
     expires_at: body.expires_at,
+    tcp_max_connections: body.tcp_max_connections,
+    udp_max_associations: body.udp_max_associations,
+    max_online_ips: body.max_online_ips,
   });
 
   if (body.enabled) {
@@ -122,6 +128,7 @@ portsRouter.put('/:id', asyncHandler(async (req, res) => {
     UPDATE ports SET server_port=@server_port, password=@password, method=@method,
       plugin=@plugin, plugin_opts=@plugin_opts, remark=@remark, enabled=@enabled,
       traffic_limit_bytes=@traffic_limit_bytes, expires_at=@expires_at,
+      tcp_max_connections=@tcp_max_connections, udp_max_associations=@udp_max_associations, max_online_ips=@max_online_ips,
       limit_exceeded=CASE WHEN @enabled = 1 THEN 0 ELSE limit_exceeded END,
       expired=CASE WHEN @enabled = 1 THEN 0 ELSE expired END,
       updated_at=datetime('now')
@@ -137,6 +144,9 @@ portsRouter.put('/:id', asyncHandler(async (req, res) => {
     enabled: next.enabled ? 1 : 0,
     traffic_limit_bytes: next.traffic_limit_bytes,
     expires_at: next.expires_at,
+    tcp_max_connections: next.tcp_max_connections,
+    udp_max_associations: next.udp_max_associations,
+    max_online_ips: next.max_online_ips,
   });
 
   res.json(findPortOr404(current.id));

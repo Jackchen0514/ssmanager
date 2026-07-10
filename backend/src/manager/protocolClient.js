@@ -43,10 +43,16 @@ export class ManagerProtocolClient {
     });
   }
 
-  async add({ serverPort, password, method, plugin, pluginOpts }) {
+  async add({ serverPort, password, method, plugin, pluginOpts, tcpMaxConnections, udpMaxAssociations, maxOnlineIps }) {
     const payload = { server_port: serverPort, password, method };
     if (plugin) payload.plugin = plugin;
     if (pluginOpts) payload.plugin_opts = pluginOpts;
+    // Requires ssmanager >= v1.23.8 (Jackchen0514/shadowsocks-rust fork); older
+    // builds silently ignore unknown fields in the add: request, so it's safe
+    // to always send these when set even against a stock/older binary.
+    if (tcpMaxConnections) payload.tcp_max_connections = tcpMaxConnections;
+    if (udpMaxAssociations) payload.udp_max_associations = udpMaxAssociations;
+    if (maxOnlineIps) payload.max_online_ips = maxOnlineIps;
     const reply = await this._send(`add: ${JSON.stringify(payload)}`);
     return this._expectOk(reply, 'add');
   }

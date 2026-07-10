@@ -20,6 +20,16 @@
           <el-tag v-if="row.expired" type="danger" size="small" style="margin-left: 6px">已过期</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="连接限制" width="220">
+        <template #default="{ row }">
+          <span v-if="!row.tcp_max_connections && !row.udp_max_associations && !row.max_online_ips">不限</span>
+          <template v-else>
+            <el-tag v-if="row.tcp_max_connections" size="small" style="margin-right: 4px">TCP≤{{ row.tcp_max_connections }}</el-tag>
+            <el-tag v-if="row.udp_max_associations" size="small" style="margin-right: 4px">UDP≤{{ row.udp_max_associations }}</el-tag>
+            <el-tag v-if="row.max_online_ips" size="small">IP≤{{ row.max_online_ips }}</el-tag>
+          </template>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-switch :model-value="!!row.enabled" @change="() => onToggle(row)" />

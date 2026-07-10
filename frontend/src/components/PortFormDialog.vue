@@ -33,6 +33,18 @@
         />
         <div class="form-hint">到期后会自动禁用该端口</div>
       </el-form-item>
+      <el-form-item label="TCP 连接数">
+        <el-input-number v-model="form.tcp_max_connections" :min="0" style="width: 100%" />
+        <div class="form-hint">最大并发 TCP 连接数，0 表示不限（需 ssmanager ≥ v1.23.8）</div>
+      </el-form-item>
+      <el-form-item label="UDP 会话数">
+        <el-input-number v-model="form.udp_max_associations" :min="0" style="width: 100%" />
+        <div class="form-hint">最大 UDP 会话数，0 表示不限（需 ssmanager ≥ v1.23.8）</div>
+      </el-form-item>
+      <el-form-item label="在线 IP 数">
+        <el-input-number v-model="form.max_online_ips" :min="0" style="width: 100%" />
+        <div class="form-hint">同时持有连接的不同客户端 IP 数上限（近似设备数限制），0 表示不限（需 ssmanager ≥ v1.23.8）</div>
+      </el-form-item>
       <el-form-item label="备注">
         <el-input v-model="form.remark" placeholder="例如：给张三用" />
       </el-form-item>
@@ -105,6 +117,9 @@ const form = reactive({
   enabled: true,
   trafficLimitGb: 0,
   expiresAt: null,
+  tcp_max_connections: 0,
+  udp_max_associations: 0,
+  max_online_ips: 0,
 });
 
 watch(
@@ -121,6 +136,9 @@ watch(
         enabled: !!props.port.enabled,
         trafficLimitGb: (props.port.traffic_limit_bytes ?? 0) / GB,
         expiresAt: props.port.expires_at ? new Date(props.port.expires_at) : null,
+        tcp_max_connections: props.port.tcp_max_connections ?? 0,
+        udp_max_associations: props.port.udp_max_associations ?? 0,
+        max_online_ips: props.port.max_online_ips ?? 0,
       });
     } else {
       Object.assign(form, {
@@ -131,6 +149,9 @@ watch(
         enabled: true,
         trafficLimitGb: 0,
         expiresAt: null,
+        tcp_max_connections: 0,
+        udp_max_associations: 0,
+        max_online_ips: 0,
       });
     }
   }

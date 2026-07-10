@@ -26,7 +26,7 @@ sudo ./install.sh
 脚本会自动完成：
 
 1. 安装 Node.js 20（如未安装或版本 <18）、编译工具链（gcc/make 等，供 better-sqlite3 编译原生模块用）。
-2. 从 GitHub Releases 下载并校验 checksum 安装 shadowsocks-rust（`ssserver`/`ssmanager`/`sslocal`/`ssservice`）到 `/usr/local/bin`。
+2. 从 [Jackchen0514/shadowsocks-rust](https://github.com/Jackchen0514/shadowsocks-rust) 的 GitHub Releases 下载并校验 checksum 安装 shadowsocks-rust（`ssserver`/`ssmanager`/`sslocal`/`ssservice`）到 `/usr/local/bin`（`install.sh` 里的 `SSRUST_REPO` 变量可改成其他仓库，比如切回官方 `shadowsocks/shadowsocks-rust`）。
 3. 安装后端依赖，首次运行时生成带随机 `JWT_SECRET` 和随机管理员密码的 `backend/.env`，创建管理员账号。
 4. 准备前端生产包（`frontend/dist`），由后端 Express 直接托管（`/` 走静态文件，`/api` 走接口），单进程单端口，无需额外装 nginx。**优先从 GitHub Releases 下载 CI 预编译好的产物**（见下方「前端预编译」一节），下载失败时才会退回到本机跑 `npm run build`。
 5. 注册为 systemd 服务 `ssmanager-panel`（开机自启、崩溃自动重启）。
@@ -113,6 +113,12 @@ ping                                                                  -> stat: {
 
 以上命令格式已经用真实的 `ssmanager` 二进制（v1.24.0）验证过：`list` 回复的是裸数组，不是 `{"servers":[...]}`（一些文档/旧版本描述的格式），`protocolClient.js` 里两种格式都能兼容解析。
 
+如果 `ssmanager` 是 [Jackchen0514/shadowsocks-rust](https://github.com/Jackchen0514/shadowsocks-rust) ≥ v1.23.8，`add:` 命令还可以附带三个可选字段（面板在端口的「TCP 连接数」「UDP 会话数」「在线 IP 数」有值时会自动带上，0/不填就不带）：
+
+```
+add: {"server_port":8388,"password":"...","method":"aes-256-gcm","tcp_max_connections":100,"udp_max_associations":100,"max_online_ips":50}
+```
+
 真实部署时，在服务器上启动（示例）：
 
 ```bash
@@ -156,6 +162,7 @@ npm run build   # 生产构建，产物在 frontend/dist，可用任意静态文
 - 单端口流量曲线（7/30 天）
 - 流量限额：可为每个端口设置流量上限（GB，0 表示不限），超过后自动从 manager 移除并禁用，标记为「已超限」；可编辑提高限额或点「重置流量」后重新启用
 - 过期时间：可为每个端口设置到期时间（留空表示永不过期），到期后自动从 manager 移除并禁用，标记为「已过期」；编辑延长过期时间后可重新启用
+- 连接限制：可为每个端口设置 TCP 最大并发连接数、UDP 最大会话数、同时在线的不同客户端 IP 数上限（0 均表示不限），由 ssmanager 自身实时拒绝超限的新连接/新 IP，不是面板轮询后才生效；IP 数限制是目前唯一能近似做到「设备数限制」的手段（依据是「不同客户端 IP」，不是真实设备指纹）。**需要 [Jackchen0514/shadowsocks-rust](https://github.com/Jackchen0514/shadowsocks-rust) ≥ v1.23.8**，官方原版或更早版本的 ssmanager 会静默忽略这三个字段
 - 设置：Manager 连接参数、ssmanager 进程控制与日志查看、修改管理员密码
 - API Token：在「设置」页面生成长期有效的 token，供第三方脚本/系统调用面板现有的所有 API（无需走用户名密码登录），可随时撤销
 

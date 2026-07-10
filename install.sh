@@ -5,7 +5,7 @@
 # What it does:
 #   1. Installs Node.js (>=18) and a C build toolchain if missing.
 #   2. Downloads and installs shadowsocks-rust (ssserver/ssmanager/sslocal/ssservice)
-#      from the official GitHub releases, unless --skip-ssrust is given.
+#      from GitHub releases (see SSRUST_REPO below), unless --skip-ssrust is given.
 #   3. Installs backend deps, generates backend/.env with random secrets on first
 #      run, seeds the admin account, builds the frontend.
 #   4. Registers the panel as a systemd service (ssmanager-panel) so it survives
@@ -138,6 +138,7 @@ log "step 2/6: shadowsocks-rust (ssserver/ssmanager)"
 # ---------------------------------------------------------------------------
 
 SSRUST_BIN_DIR="/usr/local/bin"
+SSRUST_REPO="Jackchen0514/shadowsocks-rust"
 
 if [[ "$SKIP_SSRUST" -eq 1 ]]; then
   log "skipping shadowsocks-rust install (--skip-ssrust)"
@@ -152,17 +153,17 @@ else
     *) die "unsupported architecture for shadowsocks-rust auto-install: $ARCH (use --skip-ssrust and install it manually)" ;;
   esac
 
-  log "fetching latest shadowsocks-rust release info for $TARGET"
+  log "fetching latest shadowsocks-rust release info for $TARGET (repo: $SSRUST_REPO)"
   # Fetched to a file rather than a shell variable: the release JSON is
   # several hundred KB (dozens of asset entries), and under `bash -x` a
   # variable that large gets dumped in full into the trace output.
   RELEASE_JSON_FILE="$(mktemp)"
-  curl -fsSL https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest -o "$RELEASE_JSON_FILE"
+  curl -fsSL "https://api.github.com/repos/${SSRUST_REPO}/releases/latest" -o "$RELEASE_JSON_FILE"
   TAG="$(grep -m1 '"tag_name"' "$RELEASE_JSON_FILE" | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
   rm -f "$RELEASE_JSON_FILE"
   [[ -n "$TAG" ]] || die "could not determine latest shadowsocks-rust release (GitHub API unreachable?)"
   ASSET="shadowsocks-${TAG}.${TARGET}.tar.xz"
-  URL="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${TAG}/${ASSET}"
+  URL="https://github.com/${SSRUST_REPO}/releases/download/${TAG}/${ASSET}"
 
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TMP_DIR"' EXIT

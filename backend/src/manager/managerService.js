@@ -22,6 +22,9 @@ export async function addPortToManager(port) {
     method: port.method,
     plugin: port.plugin ?? undefined,
     pluginOpts: port.plugin_opts ?? undefined,
+    tcpMaxConnections: port.tcp_max_connections || undefined,
+    udpMaxAssociations: port.udp_max_associations || undefined,
+    maxOnlineIps: port.max_online_ips || undefined,
   });
 }
 
@@ -144,6 +147,9 @@ export async function reconcile() {
       method: port.method,
       plugin: port.plugin ?? undefined,
       pluginOpts: port.plugin_opts ?? undefined,
+      tcpMaxConnections: port.tcp_max_connections || undefined,
+      udpMaxAssociations: port.udp_max_associations || undefined,
+      maxOnlineIps: port.max_online_ips || undefined,
     });
   }
 
