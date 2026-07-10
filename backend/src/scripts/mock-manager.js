@@ -56,6 +56,21 @@ socket.on('message', (buf, rinfo) => {
         stat[serverPort] = info.cumulativeBytes;
       }
       reply(`stat: ${JSON.stringify(stat)}`);
+    } else if (text.trim() === 'conn-stat') {
+      // Matches the real shadowsocks-rust ssmanager fork (v1.23.9+): fake
+      // some plausible live connection counts so the panel has something to show.
+      const list = [...servers.keys()].map((server_port) => {
+        const tcpConnCount = Math.floor(Math.random() * 5);
+        const ips = Array.from({ length: Math.max(1, tcpConnCount) }, (_, i) => `10.0.0.${i + 1}`).slice(0, tcpConnCount);
+        return {
+          server_port,
+          tcp_conn_count: tcpConnCount,
+          udp_assoc_count: Math.floor(Math.random() * 3),
+          online_ip_count: ips.length,
+          online_ips: ips,
+        };
+      });
+      reply(JSON.stringify(list));
     } else {
       console.warn(`[mock-manager] unknown command: ${text}`);
     }

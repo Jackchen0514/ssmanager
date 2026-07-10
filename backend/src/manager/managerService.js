@@ -47,6 +47,16 @@ export async function getCurrentCumulative(serverPort) {
 }
 
 /**
+ * Live TCP/UDP connection counts for one port, or null if the manager doesn't
+ * know about this port (or doesn't support conn-stat, e.g. ssmanager < v1.23.9).
+ */
+export async function getConnStat(serverPort) {
+  const client = makeClient();
+  const stats = await client.connStat();
+  return stats.has(serverPort) ? stats.get(serverPort) : null;
+}
+
+/**
  * Pull cumulative traffic per port from the manager and fold it into
  * total_bytes (monotonic across ssserver restarts) + today's traffic_daily row.
  * Ports that cross their traffic_limit_bytes get pulled from the manager and

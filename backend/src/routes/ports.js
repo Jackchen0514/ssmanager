@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { addPortToManager, removePortFromManager, getCurrentCumulative } from '../manager/managerService.js';
+import { addPortToManager, removePortFromManager, getCurrentCumulative, getConnStat } from '../manager/managerService.js';
 
 export const portsRouter = Router();
 
@@ -195,6 +195,15 @@ portsRouter.delete('/:id', asyncHandler(async (req, res) => {
   }
   db.prepare('DELETE FROM ports WHERE id = ?').run(port.id);
   res.status(204).end();
+}));
+
+portsRouter.get('/:id/conn-stat', asyncHandler(async (req, res) => {
+  const port = findPortOr404(req.params.id);
+  if (!port.enabled) {
+    return res.json({ tcpConnCount: 0, udpAssocCount: 0, onlineIpCount: 0, onlineIps: [] });
+  }
+  const stat = await getConnStat(port.server_port).catch(() => null);
+  res.json(stat ?? { tcpConnCount: 0, udpAssocCount: 0, onlineIpCount: 0, onlineIps: [] });
 }));
 
 portsRouter.get('/:id/traffic', (req, res) => {

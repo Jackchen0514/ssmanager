@@ -40,5 +40,9 @@ export const usePortsStore = defineStore('ports', {
       const { data } = await http.get(`/ports/${id}/traffic`, { params: { days } });
       return data;
     },
+    async fetchConnStat(id) {
+      const { data } = await http.get(`/ports/${id}/conn-stat`);
+      return data;
+    },
   },
 });

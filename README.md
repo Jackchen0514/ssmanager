@@ -119,6 +119,12 @@ ping                                                                  -> stat: {
 add: {"server_port":8388,"password":"...","method":"aes-256-gcm","tcp_max_connections":100,"udp_max_associations":100,"max_online_ips":50}
 ```
 
+如果 `ssmanager` ≥ v1.23.9，还支持一个新命令 `conn-stat`，用来查询每个端口**当前实时**的连接数（不是累计流量），面板在节点详情页每 5 秒轮询一次：
+
+```
+conn-stat                                                            -> [{"server_port":8388,"tcp_conn_count":3,"udp_assoc_count":1,"online_ip_count":2,"online_ips":["1.2.3.4","5.6.7.8"]}]
+```
+
 真实部署时，在服务器上启动（示例）：
 
 ```bash
@@ -163,6 +169,7 @@ npm run build   # 生产构建，产物在 frontend/dist，可用任意静态文
 - 流量限额：可为每个端口设置流量上限（GB，0 表示不限），超过后自动从 manager 移除并禁用，标记为「已超限」；可编辑提高限额或点「重置流量」后重新启用
 - 过期时间：可为每个端口设置到期时间（留空表示永不过期），到期后自动从 manager 移除并禁用，标记为「已过期」；编辑延长过期时间后可重新启用
 - 连接限制：可为每个端口设置 TCP 最大并发连接数、UDP 最大会话数、同时在线的不同客户端 IP 数上限（0 均表示不限），由 ssmanager 自身实时拒绝超限的新连接/新 IP，不是面板轮询后才生效；IP 数限制是目前唯一能近似做到「设备数限制」的手段（依据是「不同客户端 IP」，不是真实设备指纹）。**需要 [Jackchen0514/shadowsocks-rust](https://github.com/Jackchen0514/shadowsocks-rust) ≥ v1.23.8**，官方原版或更早版本的 ssmanager 会静默忽略这三个字段
+- 实时连接数：节点详情页每 5 秒展示当前 TCP 连接数、UDP 会话数、在线 IP 数（及具体 IP 列表），用于观察是否接近连接限制。**需要 [Jackchen0514/shadowsocks-rust](https://github.com/Jackchen0514/shadowsocks-rust) ≥ v1.23.9**，更早版本会一直显示 0
 - 设置：Manager 连接参数、ssmanager 进程控制与日志查看、修改管理员密码
 - API Token：在「设置」页面生成长期有效的 token，供第三方脚本/系统调用面板现有的所有 API（无需走用户名密码登录），可随时撤销
 

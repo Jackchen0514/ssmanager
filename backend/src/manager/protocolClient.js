@@ -6,6 +6,8 @@ import dgram from 'node:dgram';
  *   remove: {"server_port":8388}                                     -> "ok"
  *   list                                                             -> {"servers":[{"server_port":8388}, ...]}
  *   ping                                                             -> "stat: {\"8388\":12345}"
+ *   conn-stat                                                        -> {"servers":[{"server_port":8388,"tcp_conn_count":3,"udp_assoc_count":1,"online_ip_count":2,"online_ips":["1.2.3.4"]}]}
+ *                                                                        (requires ssmanager >= v1.23.9, Jackchen0514/shadowsocks-rust fork)
  *
  * Kept isolated from business logic so the wire format can be adjusted in one
  * place if a real ssmanager's replies differ from the documented format.
@@ -79,6 +81,23 @@ export class ManagerProtocolClient {
     const stats = new Map();
     for (const [port, bytes] of Object.entries(parsed ?? {})) {
       stats.set(Number(port), Number(bytes));
+    }
+    return stats;
+  }
+
+  /** Returns a Map<serverPort:number, {tcpConnCount, udpAssocCount, onlineIpCount, onlineIps}> */
+  async connStat() {
+    const reply = await this._send('conn-stat');
+    const parsed = this._parseJsonBody(reply);
+    const servers = Array.isArray(parsed) ? parsed : (parsed?.servers ?? []);
+    const stats = new Map();
+    for (const s of servers) {
+      stats.set(Number(s.server_port), {
+        tcpConnCount: s.tcp_conn_count ?? 0,
+        udpAssocCount: s.udp_assoc_count ?? 0,
+        onlineIpCount: s.online_ip_count ?? 0,
+        onlineIps: s.online_ips ?? [],
+      });
     }
     return stats;
   }
