@@ -225,9 +225,13 @@ cd "$FRONTEND_DIR"
 FRONTEND_READY=0
 
 # Let an operator pre-place a build (e.g. built on a bigger machine and scp'd
-# over) and skip both the network fetch and the local build entirely.
-if [[ "$BUILD_FRONTEND" -eq 0 && -f dist/index.html ]]; then
-  log "frontend/dist already present, using it as-is (pass --build-frontend to force a rebuild)"
+# over) and skip both the network fetch and the local build entirely. Only
+# trust an *externally* placed dist/, though: our own prebuilt-download/local-
+# build paths below always drop a marker file, so a dist/ left over from a
+# previous install.sh run is never mistaken for a manual pre-place and is
+# always re-fetched to pick up upstream changes.
+if [[ "$BUILD_FRONTEND" -eq 0 && -f dist/index.html && ! -f dist/.ssmanager-installed ]]; then
+  log "frontend/dist already present (not placed by install.sh), using it as-is (pass --build-frontend to force a rebuild)"
   FRONTEND_READY=1
 fi
 
@@ -249,6 +253,7 @@ if [[ "$BUILD_FRONTEND" -eq 0 && "$FRONTEND_READY" -eq 0 ]]; then
         rm -rf dist
         mkdir -p dist
         tar -xzf "$PREBUILT_DIR/frontend-dist.tar.gz" -C dist --strip-components=1
+        touch dist/.ssmanager-installed
         log "using prebuilt frontend from GitHub Releases (skipped local npm/vite build)"
         FRONTEND_READY=1
       else
@@ -277,6 +282,7 @@ if [[ "$FRONTEND_READY" -eq 0 ]]; then
   [[ "$NODE_HEAP_MB" -lt 512 ]] && NODE_HEAP_MB=512
   log "building frontend with NODE_OPTIONS=--max-old-space-size=${NODE_HEAP_MB} (detected ${BUILD_MEM_MB}MB RAM+swap)"
   NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}" npm run build
+  touch dist/.ssmanager-installed
 fi
 
 # ---------------------------------------------------------------------------
