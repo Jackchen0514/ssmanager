@@ -9,7 +9,9 @@
 
 ```
 install.sh    一键安装脚本
+update.sh     一键升级脚本（不影响已有账号密码/端口配置/数据库）
 uninstall.sh  一键卸载脚本
+VERSION       当前版本号
 backend/      Node.js API 服务（生产模式下也直接托管前端静态文件）
 frontend/     Vue 3 管理界面
 ```
@@ -23,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/Jackchen0514/ssmanager/main/install
 sudo bash install.sh
 ```
 
-源码默认会装到 `/opt/ssmanager`（可用 `--dir` 改路径）。之后要升级，重新跑一遍同样的命令即可——脚本会重新拉最新源码，同时保留 `backend/.env`、SQLite 数据库和已下载的前端产物，不会丢账号密码和端口配置。
+源码默认会装到 `/opt/ssmanager`（可用 `--dir` 改路径）。之后要升级，用 `sudo /opt/ssmanager/update.sh` 即可（见下方「升级」一节），不会丢账号密码和端口配置。
 
 如果更习惯用 git（比如你 fork 了这个仓库、想本地改代码再装），也可以照旧：
 
@@ -32,7 +34,7 @@ git clone <本仓库地址> ssmanager && cd ssmanager
 sudo ./install.sh
 ```
 
-这种方式下升级用 `git pull && sudo ./install.sh` 即可，install.sh 检测到 `backend/`、`frontend/` 已经在旁边就会跳过自动拉源码那一步，行为和以前完全一样。
+这种方式下升级同样用 `sudo ./update.sh`（内部会 `git pull --ff-only`），或者手动 `git pull && sudo ./install.sh` 也一样。
 
 脚本会自动完成：
 
@@ -85,6 +87,20 @@ systemctl status ssmanager-panel
 journalctl -u ssmanager-panel -f
 systemctl restart ssmanager-panel
 ```
+
+### 升级
+
+```bash
+sudo ./update.sh
+```
+
+（standalone 安装直接用 `sudo /opt/ssmanager/update.sh`，或者是自己 `--dir` 指定的路径。）
+
+`update.sh` 只做两件事：拉取最新代码（git 仓库用 `git pull --ff-only`，standalone 安装重新下载源码 tarball），然后把活交给 `install.sh` 刷新依赖/前端产物/systemd 服务。全程不碰 `backend/.env`（JWT 密钥、管理员密码、Manager 连接配置）和 `backend/data/`（SQLite 数据库，也就是所有端口配置、流量记录、API Token），已装好的 shadowsocks-rust 二进制也不会重装（除非加 `--force-ssrust`）。
+
+git 仓库模式下如果本地有未提交的改动导致 `git pull --ff-only` 失败，`update.sh` 会直接报错退出，不会做任何自动 `stash`/`reset` 之类的操作——先自己处理好本地改动（`git status`/`git stash`）再重跑。
+
+`update.sh` 支持透传 `install.sh` 的所有参数，比如 `sudo ./update.sh --force-ssrust` 顺带升级 shadowsocks-rust 二进制。
 
 ### 卸载
 

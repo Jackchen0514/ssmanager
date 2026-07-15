@@ -438,8 +438,11 @@ fi
 SERVER_IP="$(curl -fsSL --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo YOUR_SERVER_IP)"
 PANEL_HOST_ENV="$(grep -m1 '^PANEL_HOST=' "$BACKEND_DIR/.env" | cut -d= -f2- || true)"
 
+PANEL_VERSION="$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
+
 echo
 echo "=============================================================="
+echo " 面板版本:   ${PANEL_VERSION}"
 if [[ "$PANEL_HOST_ENV" == "0.0.0.0" ]]; then
 echo " 面板地址:   http://${SERVER_IP}:${PANEL_PORT}"
 echo " （PANEL_HOST=0.0.0.0，面板直接暴露在公网，注意自己加访问控制/HTTPS）"
@@ -476,6 +479,7 @@ echo " 常用命令:"
 echo "   systemctl status ssmanager-panel"
 echo "   journalctl -u ssmanager-panel -f"
 echo "   systemctl restart ssmanager-panel"
+echo "   sudo ${SCRIPT_DIR}/update.sh   # 升级到最新版本，不影响已有账号密码/端口配置/数据库"
 echo
 if [[ "$PANEL_HOST_ENV" == "0.0.0.0" ]]; then
 echo " 别忘了在防火墙/安全组放行 ${PANEL_PORT} 端口（面板本身）以及后续在面板里"
