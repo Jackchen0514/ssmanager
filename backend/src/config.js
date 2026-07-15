@@ -7,6 +7,11 @@ function projectRoot() {
 
 export const config = {
   port: Number(process.env.PORT ?? 3000),
+  // 127.0.0.1 by default: the panel itself has no TLS and is meant to be
+  // reached via an SSH tunnel or your own reverse proxy (nginx/caddy), not
+  // exposed directly to the internet. Set PANEL_HOST=0.0.0.0 to bind on all
+  // interfaces if you really want direct public access.
+  host: process.env.PANEL_HOST ?? '127.0.0.1',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
   dbPath: path.resolve(projectRoot(), process.env.DB_PATH ?? './data/ssmanager.db'),

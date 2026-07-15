@@ -21,6 +21,7 @@
 #
 #   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap]
 #                      [--build-frontend] [--no-autostart] [--dir /opt/ssmanager]
+#                      [--public]
 #
 # After the panel comes up, install.sh logs in with the admin account and
 # calls the panel's own "start ssmanager process" API so shadowsocks-rust is
@@ -29,6 +30,12 @@
 #
 # Safe to re-run: it will not overwrite an existing backend/.env or re-seed the
 # admin account, and skips the shadowsocks-rust download if already installed.
+#
+# By default the panel only listens on 127.0.0.1 (PANEL_HOST in backend/.env)
+# -- it has no TLS of its own, so it's meant to be reached over an SSH tunnel
+# or through your own reverse proxy (nginx/caddy), not exposed to the internet
+# directly. Pass --public on first install to set PANEL_HOST=0.0.0.0 instead
+# (only the shadowsocks ports you add in the panel need this either way).
 #
 # Standalone mode: if this script is run on its own (no backend/ and frontend/
 # next to it -- i.e. not from inside a git checkout of the repo), it downloads
@@ -51,6 +58,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 PANEL_PORT="${PANEL_PORT:-3000}"
+PANEL_PUBLIC=0
 SSMANAGER_REPO="${SSMANAGER_REPO:-Jackchen0514/ssmanager}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/ssmanager}"
 SKIP_SSRUST=0
@@ -86,8 +94,9 @@ while [[ $# -gt 0 ]]; do
     --build-frontend) BUILD_FRONTEND=1; shift ;;
     --no-autostart) NO_AUTOSTART=1; shift ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
+    --public) PANEL_PUBLIC=1; shift ;;
     -h|--help)
-      sed -n '2,45p' "${BASH_SOURCE[0]}"
+      sed -n '2,52p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -252,8 +261,12 @@ if [[ ! -f .env ]]; then
   ADMIN_PASSWORD_GENERATED="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 16)"
   SSMANAGER_PATH="$(command -v ssmanager || echo /usr/local/bin/ssmanager)"
 
+  PANEL_HOST_GENERATED="127.0.0.1"
+  [[ "$PANEL_PUBLIC" -eq 1 ]] && PANEL_HOST_GENERATED="0.0.0.0"
+
   cat > .env <<EOF
 PORT=${PANEL_PORT}
+PANEL_HOST=${PANEL_HOST_GENERATED}
 JWT_SECRET=${JWT_SECRET}
 JWT_EXPIRES_IN=12h
 DB_PATH=./data/ssmanager.db
@@ -423,10 +436,20 @@ except Exception:
 fi
 
 SERVER_IP="$(curl -fsSL --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo YOUR_SERVER_IP)"
+PANEL_HOST_ENV="$(grep -m1 '^PANEL_HOST=' "$BACKEND_DIR/.env" | cut -d= -f2- || true)"
 
 echo
 echo "=============================================================="
+if [[ "$PANEL_HOST_ENV" == "0.0.0.0" ]]; then
 echo " 面板地址:   http://${SERVER_IP}:${PANEL_PORT}"
+echo " （PANEL_HOST=0.0.0.0，面板直接暴露在公网，注意自己加访问控制/HTTPS）"
+else
+echo " 面板只监听本机 (PANEL_HOST=${PANEL_HOST_ENV:-127.0.0.1})，公网无法直接访问，可选："
+echo "   1. SSH 隧道：本机执行 ssh -L ${PANEL_PORT}:127.0.0.1:${PANEL_PORT} root@${SERVER_IP}，"
+echo "      然后浏览器打开 http://127.0.0.1:${PANEL_PORT}"
+echo "   2. 自己在前面加反向代理（nginx/caddy）转发到 127.0.0.1:${PANEL_PORT}，走 HTTPS 对外"
+echo "   3. 重装时加 --public（或把 backend/.env 里 PANEL_HOST 改成 0.0.0.0 后重启服务）直接公网暴露"
+fi
 if [[ -n "$ADMIN_PASSWORD_GENERATED" ]]; then
 echo " 管理员账号: admin"
 echo " 管理员密码: ${ADMIN_PASSWORD_GENERATED}"
@@ -454,6 +477,11 @@ echo "   systemctl status ssmanager-panel"
 echo "   journalctl -u ssmanager-panel -f"
 echo "   systemctl restart ssmanager-panel"
 echo
+if [[ "$PANEL_HOST_ENV" == "0.0.0.0" ]]; then
 echo " 别忘了在防火墙/安全组放行 ${PANEL_PORT} 端口（面板本身）以及后续在面板里"
 echo " 新增的 shadowsocks 端口。"
+else
+echo " 别忘了在防火墙/安全组放行后续在面板里新增的 shadowsocks 端口"
+echo " （面板本身只监听本机，不用额外放行 ${PANEL_PORT}）。"
+fi
 echo "=============================================================="

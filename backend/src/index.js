@@ -41,7 +41,7 @@ if (fs.existsSync(indexHtmlPath)) {
 
 app.use(errorHandler);
 
-app.listen(config.port, () => {
-  console.log(`ssmanager panel backend listening on :${config.port}`);
+app.listen(config.port, config.host, () => {
+  console.log(`ssmanager panel backend listening on ${config.host}:${config.port}`);
   startScheduler();
 });
