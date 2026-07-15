@@ -16,12 +16,23 @@ frontend/     Vue 3 管理界面
 
 ## 一键安装（推荐，生产部署用）
 
-在一台全新的 Ubuntu/Debian/CentOS 服务器（root 权限）上：
+在一台全新的 Ubuntu/Debian/CentOS 服务器（root 权限）上，不需要先 `git clone`，直接下载 `install.sh` 这一个文件运行即可，脚本会自己去 GitHub 拉源码：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jackchen0514/ssmanager/main/install.sh -o install.sh
+sudo bash install.sh
+```
+
+源码默认会装到 `/opt/ssmanager`（可用 `--dir` 改路径）。之后要升级，重新跑一遍同样的命令即可——脚本会重新拉最新源码，同时保留 `backend/.env`、SQLite 数据库和已下载的前端产物，不会丢账号密码和端口配置。
+
+如果更习惯用 git（比如你 fork 了这个仓库、想本地改代码再装），也可以照旧：
 
 ```bash
 git clone <本仓库地址> ssmanager && cd ssmanager
 sudo ./install.sh
 ```
+
+这种方式下升级用 `git pull && sudo ./install.sh` 即可，install.sh 检测到 `backend/`、`frontend/` 已经在旁边就会跳过自动拉源码那一步，行为和以前完全一样。
 
 脚本会自动完成：
 
@@ -43,6 +54,7 @@ sudo ./install.sh --port 8080        # 面板监听端口（默认 3000，仅首
 sudo ./install.sh --no-swap          # 不自动创建 swap 文件（默认低内存无 swap 时会加 2G swap）
 sudo ./install.sh --build-frontend   # 强制本机构建前端，不去 GitHub Releases 找预编译产物
 sudo ./install.sh --no-autostart     # 装完不自动启动 ssmanager，自己去「设置」页面点「启动」
+sudo ./install.sh --dir /opt/ssmanager  # 不走 git clone 时，源码下载/更新到哪个目录（默认 /opt/ssmanager）
 ```
 
 脚本可以安全重复执行：已存在的 `backend/.env`、已装好的 shadowsocks-rust、已创建的管理员账号都不会被覆盖/重建，只会重新走 `npm install`/准备前端/重启 systemd 服务。

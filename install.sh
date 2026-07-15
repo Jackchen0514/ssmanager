@@ -12,7 +12,15 @@
 #      reboots and restarts on crash.
 #
 # Usage:
-#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap] [--build-frontend] [--no-autostart]
+#   No git clone needed -- just download this one file and run it, e.g.:
+#     curl -fsSL https://raw.githubusercontent.com/Jackchen0514/ssmanager/main/install.sh -o install.sh
+#     sudo bash install.sh
+#   It fetches the rest of the source itself (see "standalone mode" below).
+#   Already have a git checkout? Run it from there instead and it behaves the
+#   same as always (git pull to update).
+#
+#   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap]
+#                      [--build-frontend] [--no-autostart] [--dir /opt/ssmanager]
 #
 # After the panel comes up, install.sh logs in with the admin account and
 # calls the panel's own "start ssmanager process" API so shadowsocks-rust is
@@ -22,6 +30,14 @@
 # Safe to re-run: it will not overwrite an existing backend/.env or re-seed the
 # admin account, and skips the shadowsocks-rust download if already installed.
 #
+# Standalone mode: if this script is run on its own (no backend/ and frontend/
+# next to it -- i.e. not from inside a git checkout of the repo), it downloads
+# a fresh copy of the source from GitHub (no git required) into --dir (default
+# /opt/ssmanager), carries over any existing backend/.env, backend/data (the
+# admin secrets + SQLite DB) and frontend/dist, and re-execs itself from there.
+# Re-running the same curl command later both installs fresh and updates in
+# place, so it doubles as the update mechanism for standalone installs.
+#
 # Frontend: by default the installer tries to download a prebuilt frontend/dist
 # from the repo's GitHub Releases (built by .github/workflows/build-frontend.yml
 # on GitHub's own runners) instead of running `npm run build` locally, since
@@ -30,10 +46,13 @@
 
 set -euo pipefail
 
+ORIG_ARGS=("$@")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 PANEL_PORT="${PANEL_PORT:-3000}"
+SSMANAGER_REPO="${SSMANAGER_REPO:-Jackchen0514/ssmanager}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/ssmanager}"
 SKIP_SSRUST=0
 FORCE_SSRUST=0
 NO_SWAP=0
@@ -45,12 +64,16 @@ warn() { echo -e "\033[1;33m[install]\033[0m $*"; }
 die()  { echo -e "\033[1;31m[install]\033[0m $*" >&2; exit 1; }
 
 # Parses "git@github.com:owner/repo.git" or "https://github.com/owner/repo.git"
-# (or without ".git") into "owner/repo". Empty output if origin isn't GitHub.
+# (or without ".git") into "owner/repo". Falls back to $SSMANAGER_REPO when
+# there's no git checkout to read from (standalone mode extracts a tarball,
+# not a git clone, so there's no "origin" remote to detect).
 detect_repo_slug() {
   local url
   url="$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || true)"
   if [[ "$url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
     echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}"
+  else
+    echo "$SSMANAGER_REPO"
   fi
 }
 
@@ -62,8 +85,9 @@ while [[ $# -gt 0 ]]; do
     --no-swap) NO_SWAP=1; shift ;;
     --build-frontend) BUILD_FRONTEND=1; shift ;;
     --no-autostart) NO_AUTOSTART=1; shift ;;
+    --dir) INSTALL_DIR="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,29p' "${BASH_SOURCE[0]}"
+      sed -n '2,45p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -71,7 +95,36 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ $EUID -eq 0 ]] || die "please run as root (sudo ./install.sh)"
-[[ -d "$BACKEND_DIR" && -d "$FRONTEND_DIR" ]] || die "expected backend/ and frontend/ next to this script"
+
+if [[ ! -d "$BACKEND_DIR" || ! -d "$FRONTEND_DIR" ]]; then
+  # Standalone mode: this script was downloaded on its own, not from inside a
+  # git checkout. Fetch a fresh copy of the source from GitHub (no git
+  # required) into $INSTALL_DIR, then re-exec install.sh from there. Backend
+  # secrets/DB and an already-fetched frontend build are carried over so this
+  # is safe to run repeatedly (both for a fresh install and to update later).
+  command -v curl >/dev/null || die "curl is required (apt-get install -y curl), then re-run"
+  command -v tar  >/dev/null || die "tar is required (apt-get install -y tar), then re-run"
+
+  log "no local checkout found next to this script -- downloading source from github.com/${SSMANAGER_REPO} (main) to ${INSTALL_DIR}"
+  SRC_TMP="$(mktemp -d)"
+  curl -fsSL "https://github.com/${SSMANAGER_REPO}/archive/refs/heads/main.tar.gz" \
+    | tar -xz -C "$SRC_TMP" --strip-components=1
+
+  for keep in backend/.env backend/data frontend/dist; do
+    if [[ -e "$INSTALL_DIR/$keep" ]]; then
+      mkdir -p "$SRC_TMP/$(dirname "$keep")"
+      rm -rf "${SRC_TMP:?}/$keep"
+      cp -a "$INSTALL_DIR/$keep" "$SRC_TMP/$keep"
+    fi
+  done
+
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+  rm -rf "${INSTALL_DIR:?}"
+  mv "$SRC_TMP" "$INSTALL_DIR"
+
+  log "re-running install.sh from ${INSTALL_DIR}"
+  exec "$INSTALL_DIR/install.sh" "${ORIG_ARGS[@]}"
+fi
 
 # ---------------------------------------------------------------------------
 log "step 1/6: system packages"
