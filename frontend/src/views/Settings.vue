@@ -26,6 +26,13 @@
         </el-form-item>
         <el-form-item label="启动参数">
           <el-input v-model="form.binary_args" />
+          <div class="form-hint">
+            默认 <code>-s 0.0.0.0</code> 只监听 IPv4。服务器有可用公网 IPv6 的话，把
+            <code>-s 0.0.0.0</code> 改成 <code>-s ::</code> 可以让同一个 ssserver 同时监听
+            v4 和 v6（Linux 下双栈绑定）；改完点保存并重启 ssmanager 进程生效。前提是这台机器
+            内核没有禁用 IPv6（<code>ip -6 addr</code> 至少能看到 <code>::1</code>），否则绑定
+            <code>::</code> 会直接失败，连 IPv4 也起不来。
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="savingConfig" @click="saveConfig">保存</el-button>
@@ -143,6 +150,17 @@ onBeforeUnmount(() => clearInterval(timer));
 </script>
 
 <style scoped>
+.form-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.form-hint code {
+  background: var(--el-fill-color-light);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
 .process-header {
   display: flex;
   align-items: center;

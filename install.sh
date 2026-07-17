@@ -51,19 +51,22 @@
 # that build can OOM on small/low-RAM VPS boxes. Pass --build-frontend to force
 # a local build (e.g. you changed frontend/ code and want to test it).
 #
-# IPv6: on first install, if this machine has a global IPv6 address, the
-# generated backend/.env binds shadowsocks-rust to `-s ::` instead of
-# `-s 0.0.0.0`, which on Linux dual-stack-binds a single ssserver to both v4
-# and v6 automatically. Set the server's IPv6 address under Settings ->
-# "服务器公网地址 (IPv6)" in the panel afterwards to get a second, v6 ss://
-# link/QR per node. Existing installs keep whatever's already in their DB --
-# pass --ssmanager-args "...-s :: ..." (either on install.sh directly, or via
-# `update.sh ... --ssmanager-args "..."`) to push new launch args straight
-# into the running panel and restart ssmanager with them, no manual Settings
-# edit needed. This also requires that IPv6 traffic to the port actually
-# reaches the box -- check your cloud firewall/security group has a rule for
-# ::/0 (IPv4 and IPv6 rules are usually separate) and the VPC route table has
-# an IPv6 route, not just the OS having an address assigned.
+# IPv6: always defaults to `-s 0.0.0.0` (IPv4 only), even on installs -- it's
+# never auto-switched to `-s ::`, since binding `::` fails outright (and
+# takes IPv4 down with it, no fallback) on hosts where IPv6 is fully disabled
+# at the kernel level. To opt in once you've confirmed this host actually has
+# working IPv6 (`ip -6 addr` shows more than just `::1`, and
+# /proc/sys/net/ipv6/conf/all/disable_ipv6 is 0): pass
+# --ssmanager-args "--manager-addr 127.0.0.1:6100 -s :: -m aes-256-gcm" to
+# install.sh or update.sh -- it logs into the panel, writes the new launch
+# args straight into its DB (Settings -> 启动参数 also works by hand), and
+# restarts ssmanager with them. `-s ::` then dual-stack-binds a single
+# ssserver to both v4 and v6 on Linux. Also set the server's IPv6 address
+# under Settings -> "服务器公网地址 (IPv6)" to get a second, v6 ss:// link/QR
+# per node. And check your cloud firewall/security group allows ::/0 on the
+# port (IPv4 and IPv6 are usually separate rules) and the VPC route table has
+# an IPv6 route -- an address being assigned to the OS doesn't mean the path
+# in is actually open.
 
 set -euo pipefail
 
@@ -112,7 +115,7 @@ while [[ $# -gt 0 ]]; do
     --public) PANEL_PUBLIC=1; shift ;;
     --ssmanager-args) SSMANAGER_ARGS_OVERRIDE="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,67p' "${BASH_SOURCE[0]}"
+      sed -n '2,70p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -283,15 +286,14 @@ if [[ ! -f .env ]]; then
   if [[ -n "$SSMANAGER_ARGS_OVERRIDE" ]]; then
     SSMANAGER_ARGS_GENERATED="$SSMANAGER_ARGS_OVERRIDE"
   else
-    # `::` dual-stack-binds a single ssserver to both v4 and v6 on Linux
-    # (IPV6_V6ONLY off by default); only offer it when the box actually has a
-    # global IPv6 address, so v4-only hosts don't get a bind target that fails.
-    SSMANAGER_BIND_HOST="0.0.0.0"
-    if command -v ip >/dev/null 2>&1 && ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
-      SSMANAGER_BIND_HOST="::"
-      log "global IPv6 address detected, binding shadowsocks-rust to :: (dual-stack v4+v6)"
-    fi
-    SSMANAGER_ARGS_GENERATED="--manager-addr 127.0.0.1:6100 -s ${SSMANAGER_BIND_HOST} -m aes-256-gcm"
+    # Always defaults to IPv4-only (-s 0.0.0.0), even when this box has a
+    # global IPv6 address: on a host where IPv6 is fully disabled at the
+    # kernel level, binding :: fails outright and takes IPv4 down with it (no
+    # automatic fallback), so this errs conservative rather than guessing.
+    # Switch to -s :: yourself (Settings -> 启动参数, or --ssmanager-args)
+    # once you've confirmed IPv6 actually works on this host -- see the IPv6
+    # section below.
+    SSMANAGER_ARGS_GENERATED="--manager-addr 127.0.0.1:6100 -s 0.0.0.0 -m aes-256-gcm"
   fi
 
   cat > .env <<EOF
