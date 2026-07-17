@@ -55,7 +55,7 @@
     </el-table>
 
     <PortFormDialog v-model="dialogOpen" :port="editingPort" :save-fn="onSave" />
-    <ShareDialog v-model="shareOpen" :port="sharingPort" :server-host="serverHost" />
+    <ShareDialog v-model="shareOpen" :port="sharingPort" :server-host="serverHost" :server-host-v6="serverHostV6" />
   </div>
 </template>
 
@@ -74,11 +74,13 @@ const editingPort = ref(null);
 const shareOpen = ref(false);
 const sharingPort = ref(null);
 const serverHost = ref('');
+const serverHostV6 = ref('');
 
 onMounted(async () => {
   await store.fetchPorts();
   const { data } = await http.get('/settings/manager');
   serverHost.value = data.server_host;
+  serverHostV6.value = data.server_host_v6;
 });
 
 function openCreate() {

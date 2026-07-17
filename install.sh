@@ -50,6 +50,14 @@
 # on GitHub's own runners) instead of running `npm run build` locally, since
 # that build can OOM on small/low-RAM VPS boxes. Pass --build-frontend to force
 # a local build (e.g. you changed frontend/ code and want to test it).
+#
+# IPv6: on first install only, if this machine has a global IPv6 address, the
+# generated backend/.env binds shadowsocks-rust to `-s ::` instead of
+# `-s 0.0.0.0`, which on Linux dual-stack-binds a single ssserver to both v4
+# and v6 automatically. Set the server's IPv6 address under Settings ->
+# "服务器公网地址 (IPv6)" in the panel afterwards to get a second, v6 ss://
+# link/QR per node. Existing installs are not touched -- flip `-s 0.0.0.0` to
+# `-s ::` in Settings -> 启动参数 yourself and restart the process to opt in.
 
 set -euo pipefail
 
@@ -96,7 +104,7 @@ while [[ $# -gt 0 ]]; do
     --dir) INSTALL_DIR="$2"; shift 2 ;;
     --public) PANEL_PUBLIC=1; shift ;;
     -h|--help)
-      sed -n '2,52p' "${BASH_SOURCE[0]}"
+      sed -n '2,61p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -264,6 +272,15 @@ if [[ ! -f .env ]]; then
   PANEL_HOST_GENERATED="127.0.0.1"
   [[ "$PANEL_PUBLIC" -eq 1 ]] && PANEL_HOST_GENERATED="0.0.0.0"
 
+  # `::` dual-stack-binds a single ssserver to both v4 and v6 on Linux
+  # (IPV6_V6ONLY off by default); only offer it when the box actually has a
+  # global IPv6 address, so v4-only hosts don't get a bind target that fails.
+  SSMANAGER_BIND_HOST="0.0.0.0"
+  if command -v ip >/dev/null 2>&1 && ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+    SSMANAGER_BIND_HOST="::"
+    log "global IPv6 address detected, binding shadowsocks-rust to :: (dual-stack v4+v6)"
+  fi
+
   cat > .env <<EOF
 PORT=${PANEL_PORT}
 PANEL_HOST=${PANEL_HOST_GENERATED}
@@ -275,7 +292,7 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD_GENERATED}
 MANAGER_HOST=127.0.0.1
 MANAGER_PORT=6100
 SSMANAGER_BIN=${SSMANAGER_PATH}
-SSMANAGER_ARGS=--manager-addr 127.0.0.1:6100 -s 0.0.0.0 -m aes-256-gcm
+SSMANAGER_ARGS=--manager-addr 127.0.0.1:6100 -s ${SSMANAGER_BIND_HOST} -m aes-256-gcm
 EOF
 else
   log "backend/.env already exists, leaving it untouched"

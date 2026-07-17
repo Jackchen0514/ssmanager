@@ -9,8 +9,11 @@
         <el-form-item label="Manager 端口 (UDP)">
           <el-input-number v-model="form.port" :min="1" :max="65535" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="服务器公网地址">
+        <el-form-item label="服务器公网地址 (IPv4)">
           <el-input v-model="form.server_host" placeholder="客户端连接用，例如 1.2.3.4 或 example.com" />
+        </el-form-item>
+        <el-form-item label="服务器公网地址 (IPv6)">
+          <el-input v-model="form.server_host_v6" placeholder="选填，例如 2001:db8::1，留空则不生成 IPv6 分享链接" />
         </el-form-item>
         <el-form-item label="轮询间隔 (ms)">
           <el-input-number v-model="form.poll_interval_ms" :min="1000" :step="1000" style="width: 100%" />

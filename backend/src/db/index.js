@@ -22,6 +22,7 @@ db.exec(`
     host TEXT NOT NULL,
     port INTEGER NOT NULL,
     server_host TEXT NOT NULL DEFAULT '',
+    server_host_v6 TEXT NOT NULL DEFAULT '',
     poll_interval_ms INTEGER NOT NULL DEFAULT 10000,
     reconcile_interval_ms INTEGER NOT NULL DEFAULT 60000,
     connect_timeout_ms INTEGER NOT NULL DEFAULT 3000,
@@ -81,6 +82,9 @@ ensureColumn('ports', 'expired', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ports', 'tcp_max_connections', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ports', 'udp_max_associations', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ports', 'max_online_ips', 'INTEGER NOT NULL DEFAULT 0');
+// Optional second address so a dual-stack server can hand clients a v4 *and*
+// a v6 ss:// link/QR for the same port. Empty = only server_host is offered.
+ensureColumn('manager_config', 'server_host_v6', "TEXT NOT NULL DEFAULT ''");
 
 const managerConfigRow = db.prepare('SELECT id FROM manager_config WHERE id = 1').get();
 if (!managerConfigRow) {

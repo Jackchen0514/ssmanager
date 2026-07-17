@@ -10,6 +10,7 @@ const managerConfigSchema = z.object({
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
   server_host: z.string().optional(),
+  server_host_v6: z.string().optional(),
   poll_interval_ms: z.number().int().min(1000).optional(),
   reconcile_interval_ms: z.number().int().min(5000).optional(),
   connect_timeout_ms: z.number().int().min(200).optional(),
@@ -28,6 +29,7 @@ settingsRouter.put('/manager', (req, res) => {
 
   db.prepare(`
     UPDATE manager_config SET host=@host, port=@port, server_host=@server_host,
+      server_host_v6=@server_host_v6,
       poll_interval_ms=@poll_interval_ms,
       reconcile_interval_ms=@reconcile_interval_ms, connect_timeout_ms=@connect_timeout_ms,
       binary_path=@binary_path, binary_args=@binary_args, updated_at=datetime('now')
