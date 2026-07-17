@@ -102,6 +102,20 @@ git 仓库模式下如果本地有未提交的改动导致 `git pull --ff-only` 
 
 `update.sh` 支持透传 `install.sh` 的所有参数，比如 `sudo ./update.sh --force-ssrust` 顺带升级 shadowsocks-rust 二进制。
 
+已经装好的面板要切换成 IPv4+IPv6 双栈，因为 `binary_args` 实际存在面板的数据库里（不是 `backend/.env`，那个只在数据库第一次建表时读一次），改 `.env` 没用，得走面板自己的 API。加 `--ssmanager-args` 就是干这个的，两种脚本都能用：
+
+```bash
+sudo ./update.sh --ssmanager-args "--manager-addr 127.0.0.1:6100 -s :: -m aes-256-gcm"
+# 或者已经是最新代码时，直接
+sudo ./install.sh --ssmanager-args "--manager-addr 127.0.0.1:6100 -s :: -m aes-256-gcm"
+```
+
+执行时会自动登录面板、把这串参数写进数据库、然后重启 ssmanager 进程生效，不用手动进「设置」页面改。
+
+用之前确认两件事，不然 IPv4 也可能跟着一起连不上：
+- 内核没有彻底禁用 IPv6：`cat /proc/sys/net/ipv6/conf/all/disable_ipv6` 应该是 `0`，`ip -6 addr` 应该至少能看到 `::1`。真彻底禁用的话绑定 `::` 会直接失败，`ssserver` 那个端口连 IPv4 都起不来（双栈绑定失败没有自动退回纯 v4 的逻辑）；如果只是没有公网 IPv6 地址（内核本身支持），绑 `::` 是安全的，v6 客户端连不上（没有路由），v4 完全不受影响。
+- 云厂商防火墙/安全组给这个端口放行了 `::/0`：IPv4 和 IPv6 通常是两条独立规则（比如 AWS 安全组），只放行 `0.0.0.0/0` 不会自动覆盖 IPv6，很容易漏加。
+
 ### 卸载
 
 ```bash

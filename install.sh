@@ -21,7 +21,7 @@
 #
 #   sudo ./install.sh [--skip-ssrust] [--force-ssrust] [--port 3000] [--no-swap]
 #                      [--build-frontend] [--no-autostart] [--dir /opt/ssmanager]
-#                      [--public]
+#                      [--public] [--ssmanager-args "--manager-addr 127.0.0.1:6100 -s :: -m aes-256-gcm"]
 #
 # After the panel comes up, install.sh logs in with the admin account and
 # calls the panel's own "start ssmanager process" API so shadowsocks-rust is
@@ -51,13 +51,19 @@
 # that build can OOM on small/low-RAM VPS boxes. Pass --build-frontend to force
 # a local build (e.g. you changed frontend/ code and want to test it).
 #
-# IPv6: on first install only, if this machine has a global IPv6 address, the
+# IPv6: on first install, if this machine has a global IPv6 address, the
 # generated backend/.env binds shadowsocks-rust to `-s ::` instead of
 # `-s 0.0.0.0`, which on Linux dual-stack-binds a single ssserver to both v4
 # and v6 automatically. Set the server's IPv6 address under Settings ->
 # "服务器公网地址 (IPv6)" in the panel afterwards to get a second, v6 ss://
-# link/QR per node. Existing installs are not touched -- flip `-s 0.0.0.0` to
-# `-s ::` in Settings -> 启动参数 yourself and restart the process to opt in.
+# link/QR per node. Existing installs keep whatever's already in their DB --
+# pass --ssmanager-args "...-s :: ..." (either on install.sh directly, or via
+# `update.sh ... --ssmanager-args "..."`) to push new launch args straight
+# into the running panel and restart ssmanager with them, no manual Settings
+# edit needed. This also requires that IPv6 traffic to the port actually
+# reaches the box -- check your cloud firewall/security group has a rule for
+# ::/0 (IPv4 and IPv6 rules are usually separate) and the VPC route table has
+# an IPv6 route, not just the OS having an address assigned.
 
 set -euo pipefail
 
@@ -74,6 +80,7 @@ FORCE_SSRUST=0
 NO_SWAP=0
 BUILD_FRONTEND=0
 NO_AUTOSTART=0
+SSMANAGER_ARGS_OVERRIDE=""
 
 log()  { echo -e "\033[1;32m[install]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[install]\033[0m $*"; }
@@ -103,8 +110,9 @@ while [[ $# -gt 0 ]]; do
     --no-autostart) NO_AUTOSTART=1; shift ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
     --public) PANEL_PUBLIC=1; shift ;;
+    --ssmanager-args) SSMANAGER_ARGS_OVERRIDE="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,61p' "${BASH_SOURCE[0]}"
+      sed -n '2,67p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -272,13 +280,18 @@ if [[ ! -f .env ]]; then
   PANEL_HOST_GENERATED="127.0.0.1"
   [[ "$PANEL_PUBLIC" -eq 1 ]] && PANEL_HOST_GENERATED="0.0.0.0"
 
-  # `::` dual-stack-binds a single ssserver to both v4 and v6 on Linux
-  # (IPV6_V6ONLY off by default); only offer it when the box actually has a
-  # global IPv6 address, so v4-only hosts don't get a bind target that fails.
-  SSMANAGER_BIND_HOST="0.0.0.0"
-  if command -v ip >/dev/null 2>&1 && ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
-    SSMANAGER_BIND_HOST="::"
-    log "global IPv6 address detected, binding shadowsocks-rust to :: (dual-stack v4+v6)"
+  if [[ -n "$SSMANAGER_ARGS_OVERRIDE" ]]; then
+    SSMANAGER_ARGS_GENERATED="$SSMANAGER_ARGS_OVERRIDE"
+  else
+    # `::` dual-stack-binds a single ssserver to both v4 and v6 on Linux
+    # (IPV6_V6ONLY off by default); only offer it when the box actually has a
+    # global IPv6 address, so v4-only hosts don't get a bind target that fails.
+    SSMANAGER_BIND_HOST="0.0.0.0"
+    if command -v ip >/dev/null 2>&1 && ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+      SSMANAGER_BIND_HOST="::"
+      log "global IPv6 address detected, binding shadowsocks-rust to :: (dual-stack v4+v6)"
+    fi
+    SSMANAGER_ARGS_GENERATED="--manager-addr 127.0.0.1:6100 -s ${SSMANAGER_BIND_HOST} -m aes-256-gcm"
   fi
 
   cat > .env <<EOF
@@ -292,7 +305,7 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD_GENERATED}
 MANAGER_HOST=127.0.0.1
 MANAGER_PORT=6100
 SSMANAGER_BIN=${SSMANAGER_PATH}
-SSMANAGER_ARGS=--manager-addr 127.0.0.1:6100 -s ${SSMANAGER_BIND_HOST} -m aes-256-gcm
+SSMANAGER_ARGS=${SSMANAGER_ARGS_GENERATED}
 EOF
 else
   log "backend/.env already exists, leaving it untouched"
@@ -412,7 +425,13 @@ fi
 # always reset; this makes install.sh actually leave shadowsocks-rust running
 # instead of just installed.
 SSMANAGER_AUTOSTARTED=0
-if [[ "$NO_AUTOSTART" -eq 0 ]] && systemctl is-active --quiet ssmanager-panel; then
+# binary_args actually used to launch ssmanager lives in the manager_config
+# DB row, not backend/.env -- .env's SSMANAGER_ARGS is only ever read once,
+# by `npm run seed`, to seed that row on a brand-new database. So on an
+# existing install --ssmanager-args has to go through the panel's own API to
+# take effect; this block runs for that even with --no-autostart, it just
+# skips the actual process/start call in that case.
+if [[ ( "$NO_AUTOSTART" -eq 0 || -n "$SSMANAGER_ARGS_OVERRIDE" ) ]] && systemctl is-active --quiet ssmanager-panel; then
   PANEL_UP=0
   for i in $(seq 1 15); do
     CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PANEL_PORT}/api/auth/me" 2>/dev/null || true)"
@@ -436,19 +455,32 @@ except Exception:
     pass' 2>/dev/null || true)"
 
     if [[ -n "$TOKEN" ]]; then
-      START_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PANEL_PORT}/api/process/start" \
-        -H "Authorization: Bearer ${TOKEN}" 2>/dev/null || true)"
-      if [[ "$START_CODE" == "200" ]]; then
-        log "ssmanager process started via panel"
-        SSMANAGER_AUTOSTARTED=1
-      else
-        warn "couldn't auto-start ssmanager (panel API returned HTTP $START_CODE) -- check the binary path/args in Settings and click 启动 manually"
+      if [[ -n "$SSMANAGER_ARGS_OVERRIDE" ]]; then
+        ARGS_BODY="$(python3 -c "import json,sys; print(json.dumps({'binary_args': sys.argv[1]}))" "$SSMANAGER_ARGS_OVERRIDE")"
+        ARGS_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X PUT "http://127.0.0.1:${PANEL_PORT}/api/settings/manager" \
+          -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' -d "$ARGS_BODY" 2>/dev/null || true)"
+        if [[ "$ARGS_CODE" == "200" ]]; then
+          log "applied --ssmanager-args to the panel's manager config: ${SSMANAGER_ARGS_OVERRIDE}"
+        else
+          warn "couldn't apply --ssmanager-args (panel API returned HTTP $ARGS_CODE) -- set it manually in Settings -> 启动参数"
+        fi
+      fi
+
+      if [[ "$NO_AUTOSTART" -eq 0 ]]; then
+        START_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PANEL_PORT}/api/process/start" \
+          -H "Authorization: Bearer ${TOKEN}" 2>/dev/null || true)"
+        if [[ "$START_CODE" == "200" ]]; then
+          log "ssmanager process started via panel"
+          SSMANAGER_AUTOSTARTED=1
+        else
+          warn "couldn't auto-start ssmanager (panel API returned HTTP $START_CODE) -- check the binary path/args in Settings and click 启动 manually"
+        fi
       fi
     else
-      warn "couldn't log in to auto-start ssmanager (check ADMIN_USERNAME/ADMIN_PASSWORD in $BACKEND_DIR/.env) -- click 启动 manually from Settings"
+      warn "couldn't log in to auto-start/reconfigure ssmanager (check ADMIN_USERNAME/ADMIN_PASSWORD in $BACKEND_DIR/.env, or that the admin password hasn't since been changed in Settings) -- do it manually from Settings"
     fi
   else
-    warn "panel API didn't respond within 15s, skipping ssmanager auto-start -- start it manually from Settings once it's up"
+    warn "panel API didn't respond within 15s, skipping ssmanager auto-start/reconfigure -- do it manually from Settings once it's up"
   fi
 fi
 
